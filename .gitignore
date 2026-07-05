@@ -1,0 +1,37 @@
+# Python System Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments (DO NOT UPLOAD THESE)
+venv/
+.venv/
+ENV/
+env/
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# Hardware Drivers / Zip files
+*.zip
+numatocdc-v1_5/
+
+# Research Data & Logs
+# This ignores folders named by date (e.g., 20240628) and raw data exports
+202*/
+*.csv
+*.txt
+*.log
+
+# Exceptions: We WANT to keep these files even if they match patterns above
+!requirements.txt
+!README.md
