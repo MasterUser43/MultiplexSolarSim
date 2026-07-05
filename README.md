@@ -8,7 +8,7 @@ Python/PyQt5 GUI for automated multi-pixel solar cell IV characterization. Integ
 3. **NI-VISA Runtime:** Essential for SMU communication. [Download here](https://www.ni.com/en-us/support/downloads/drivers/download.ni-visa.html).
 
 ## Driver & Setup Notes
-- **Numato Relay:** On Linux, the relay usually works out-of-the-box as a CDC-ACM device (`/dev/ttyACM0`). If the device is not recognized or you are moving to Windows, you may need the Numato CDC drivers. Drivers can be found on the [Numato Lab Website](https://numato.com/docs/installing-numato-lab-usb-cdc-drivers/).
+- **Numato Relay:** On Linux, the relay usually works out-of-the-box as a CDC-ACM device (`/dev/ttyACM0`). If the device is not recognized or you are moving to Windows, you may need the Numato CDC drivers. Drivers can be found on the [Numato Lab Website](https://numato.com/product/16-channel-usb-relay-module#downloads).
 
 ## Installation
 1. Clone the repository:
