@@ -24,6 +24,6 @@ Python/PyQt5 GUI for automated multi-pixel solar cell IV characterization. Integ
 
 ## Usage
 ```bash
-   python SolarGUIv2.py
+   python main.py
 ```
 

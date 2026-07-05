@@ -1,4 +1,4 @@
-r"""
+"""
 Bench test for Keithley HI -> Numato NO -> relay COM voltage path.
 
 Default test:

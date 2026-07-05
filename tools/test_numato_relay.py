@@ -1,4 +1,4 @@
-r"""
+"""
 Command-line Numato 16-channel USB relay test.
 
 Default behavior:
