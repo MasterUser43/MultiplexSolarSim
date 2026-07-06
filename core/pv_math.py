@@ -1,8 +1,11 @@
 """
 Pure PV data-analysis functions: JV-curve metric extraction and basic
-fault detection.
+fault detection. 
+
+Runnable and testable from a plain terminal against numpy arrays of voltage/current.
 """
 import numpy as np
+from scipy.optimize import least_squares
 
 
 def _interp_zero_crossing(x, y):
@@ -31,7 +34,207 @@ def _interp_zero_crossing(x, y):
     return float(x0 + (0 - y0) * (x1 - x0) / (y1 - y0))
 
 
+def derivative_resistances(V, I):
+    """Closed-form Rs/Rsh estimate from local IV slope.
+
+    Rs comes from the slope dV/dI near Voc (I ~ 0); Rsh comes from the
+    slope dV/dI near Isc (V ~ 0). 
+    
+    Always runs, but noisier than the diode-model fit below.
+    """
+    V = np.asarray(V, dtype=float)
+    I = np.asarray(I, dtype=float)
+
+    finite = np.isfinite(V) & np.isfinite(I)
+    V = V[finite]
+    I = I[finite]
+
+    if len(V) < 6:
+        return np.nan, np.nan
+
+    order = np.argsort(V)
+    V = V[order]
+    I = I[order]
+
+    # Rs near Voc
+    try:
+        voc_idx = np.argmin(np.abs(I))
+        rs_lo = max(0, voc_idx - 3)
+        rs_hi = min(len(V), voc_idx + 4)
+        V_rs = V[rs_lo:rs_hi]
+        I_rs = I[rs_lo:rs_hi]
+
+        if len(V_rs) >= 3:
+            p = np.polyfit(I_rs, V_rs, 1)
+            Rs = abs(p[0])
+        else:
+            Rs = np.nan
+    except Exception:
+        Rs = np.nan
+
+    # Rsh near Isc
+    try:
+        mask = np.abs(V) <= 0.05
+        V_rsh = V[mask]
+        I_rsh = I[mask]
+
+        if len(V_rsh) >= 3:
+            p = np.polyfit(I_rsh, V_rsh, 1)
+            Rsh = abs(p[0])
+        else:
+            Rsh = np.nan
+    except Exception:
+        Rsh = np.nan
+
+    return Rs, Rsh
+
+
+def single_diode_model_current(params, V, vt):
+    """
+    Solves the single-diode equation for current (I) at each voltage (V).
+
+    Uses the Newton-Raphson method to iteratively solve the implicit, transcendental 
+    Shockley diode equation with series and shunt resistances.
+
+    Parameters
+    ----------
+    params : tuple or list of float
+        A 5-element sequence containing:
+        - `Iph` (float): Photocurrent (A).
+        - `I0` (float): Diode saturation current (A).
+        - `n` (float): Diode ideality factor (dimensionless).
+        - `Rs` (float): Series resistance (Ohms).
+        - `Rsh` (float): Shunt resistance (Ohms).
+    V : array_like
+        Voltages at which to evaluate the current (V).
+    vt : float
+        Thermal voltage (kT/q) in V (~0.02585 V at room temperature).
+
+    Returns
+    -------
+    ndarray
+        Calculated diode current (A) for each voltage point in `V`.
+    """
+    Iph, I0, n, Rs, Rsh = params
+
+    I = np.full_like(V, Iph, dtype=float)
+
+    for _ in range(60):
+        exp_term = np.exp(np.clip((V + I * Rs) / (n * vt), -100, 100))
+
+        f = (
+            Iph
+            - I0 * (exp_term - 1)
+            - (V + I * Rs) / Rsh
+            - I
+        )
+
+        df = (
+            -I0 * exp_term * (Rs / (n * vt))
+            - Rs / Rsh
+            - 1
+        )
+
+        step = f / df
+        I -= step
+
+        if np.max(np.abs(step)) < 1e-12:
+            break
+
+    return I
+
+
+def diode_fit_resistances(V, I):
+    """Fit the single-diode model to a JV curve and return (Rs, Rsh).
+
+    Slower/More physically grounded than derivative_resistances():
+    it fits all five diode parameters simultaneously via bounded
+    least-squares, then reports just the two resistances per caller request.
+    
+    Returns (nan, nan) if there isn't enough data or the fit fails
+    to converge, which isn't an error.
+    """
+    V = np.asarray(V, dtype=float)
+    I = np.asarray(I, dtype=float)
+
+    finite = np.isfinite(V) & np.isfinite(I)
+    V = V[finite]
+    I = I[finite]
+
+    if len(V) < 10:
+        return np.nan, np.nan
+
+    vt = 0.02585    # thermal voltage at room temperature
+
+    x0 = [
+        np.max(I),  # Iph guess
+        1e-10,      # I0 guess
+        1.5,        # n guess
+        20,         # Rs guess
+        1e5,        # Rsh guess
+    ]
+    lower = [0, 1e-15, 1.0, 0, 10]
+    upper = [1, 1e-3, 4.0, 1e4, 1e9]
+
+    def residuals(params):
+        try:
+            modeled = single_diode_model_current(params, V, vt)
+            r = modeled - I
+            scale = np.median(np.abs(r)) + 1e-12
+            return np.tanh(r / (5 * scale))
+        except Exception:
+            return np.ones_like(I) * 1e6
+
+    try:
+        result = least_squares(
+            residuals,
+            x0,
+            bounds=(lower, upper),
+            loss="soft_l1",
+            f_scale=1e-6,
+            max_nfev=500,
+        )
+
+        Rs = result.x[3]
+        Rsh = result.x[4]
+        if Rsh > 1e8:
+            Rsh = 1e8
+
+        return float(Rs), float(Rsh)
+    except Exception:
+        return np.nan, np.nan
+
+
 def extract_parameters(V, I, area_cm2, pin_mw_cm2=100):
+    """
+    Extracts J-V characteristics from raw solar cell sweep data.
+
+    Calculates key performance metrics including open-circuit voltage, 
+    short-circuit current density, fill factor, and power conversion efficiency.
+
+    Parameters
+    ----------
+    V : array_like
+        Measured voltage points (V).
+    I : array_like
+        Measured current points (A).
+    area_cm2 : float
+        Active solar cell pixel area in cm^2.
+    pin_mw_cm2 : float, optional
+        Incident light power density in mW/cm^2. Defaults to 100.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the extracted performance metrics:
+        - "Voc" (float): Open-circuit voltage (V).
+        - "Jsc" (float): Short-circuit current density (mA/cm^2).
+        - "Vmpp" (float): Voltage at the maximum power point (V).
+        - "Jmpp" (float): Current density at the maximum power point (mA/cm^2).
+        - "Pmax" (float): Maximum electrical power density (mW/cm^2).
+        - "FF" (float): Fill factor (dimensionless, 0 to 1).
+        - "PCE" (float): Power conversion efficiency (%).
+    """
     V = np.asarray(V, dtype=float)
     I = np.asarray(I, dtype=float)
 
@@ -102,3 +305,58 @@ def check_fault(I):
     if np.max(np.abs(I)) < 1e-6:
         return "OPEN"
     return None
+
+
+def full_iv_report(V, I, area_cm2, pin_mw_cm2=100, fit_resistances=True):
+    """
+    Extracts standard JV parameters and calculates series/shunt resistances.
+
+    This function wraps `extract_parameters` and appends both local slope (derivative)
+    and single-diode model least-squares fit estimates of Rs and Rsh.
+
+    Parameters
+    ----------
+    V : array_like
+        Measured voltage points (V).
+    I : array_like
+        Measured current points (A).
+    area_cm2 : float
+        Active solar cell pixel area in cm^2.
+    pin_mw_cm2 : float, optional
+        Incident light power density in mW/cm^2. Defaults to 100.
+    fit_resistances : bool, optional
+        If True, runs the single-diode model fit using a bounded least-squares
+        optimization. If False, skips the fit to save processing time. Defaults to True.
+
+    Returns
+    -------
+    dict
+        A dictionary containing all standard J-V metrics, with the following 
+        additional keys:
+        - "Rs_derivative": Series resistance from local Voc slope (Ohms).
+        - "Rsh_derivative": Shunt resistance from local zero-bias slope (Ohms).
+        - "Rs_diode_eq": Series resistance from the diode-model fit (Ohms or NaN).
+        - "Rsh_diode_eq": Shunt resistance from the diode-model fit (Ohms or NaN).
+
+    Notes
+    -----
+    **Convergence Caveat:**
+    The non-linear single-diode model fit is sensitive to initial parameter guesses and 
+    can stall or converge poorly on degraded, highly resistive, or extremely noisy curves. 
+    In these instances, the least-squares results may rest near their initial bounds. Use 
+    the faster, closed-form 'derivative' outputs as a physical sanity check.
+    """
+    metrics = extract_parameters(V, I, area_cm2, pin_mw_cm2)
+
+    Rs_derivative, Rsh_derivative = derivative_resistances(V, I)
+    metrics["Rs_derivative"] = float(Rs_derivative)
+    metrics["Rsh_derivative"] = float(Rsh_derivative)
+
+    if fit_resistances:
+        Rs_diode_eq, Rsh_diode_eq = diode_fit_resistances(V, I)
+    else:
+        Rs_diode_eq, Rsh_diode_eq = np.nan, np.nan
+    metrics["Rs_diode_eq"] = float(Rs_diode_eq)
+    metrics["Rsh_diode_eq"] = float(Rsh_diode_eq)
+
+    return metrics
