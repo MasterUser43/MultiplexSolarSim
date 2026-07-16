@@ -1,9 +1,12 @@
 """
-Main window for the Multiplex Solar Simulator IV characterization app.
+Main window (PyQt5) for the Multiplex Solar Simulator J-V characterization app.
 
-Phase-0 note: this is a extraction of the former GUI class. run_measurement() 
-still lives here rather than in core/measurement.py.
-This will be decoupled later in a future implementation.
+Responsibilities:
+  - GUI Layout: Builds the control panels, J-V plot manager, and results table.
+  - Worker Coordination: Instantiates, starts, and aborts the asynchronous 
+    MeasurementWorker QThread.
+  - Signal Handling: Receives measurement streams from the background thread
+    to update plots, log messages, and output tables safely.
 """
 import os
 import time
@@ -16,25 +19,15 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import *
 
 from core.instrument_manager import InstrumentManager
-from core.measurement import PIXEL_TO_RELAY_CHANNEL, active_pixel_labels, default_pixel_area
-from core.pv_math import extract_parameters, check_fault
+from core.measurement import (
+    PIXEL_TO_RELAY_CHANNEL,
+    active_pixel_labels,
+    default_pixel_area,
+    MeasurementWorker,
+)
 from core.exporter import ResultsExporter
 
-from instruments.keithley2460 import (
-    KEITHLEY_DEFAULT_COMPLIANCE_A,
-    init_keithley,
-    keithley_output_safe,
-    keithley_output_enable,
-    keithley_read_current,
-    keithley_source_voltage,
-)
-from instruments.numato_relay import (
-    RELAY_SETTLE_S,
-    numato_relay_token,
-    numato_command,
-    all_pixels_disconnect,
-    connect_pixel,
-)
+from instruments.keithley2460 import KEITHLEY_DEFAULT_COMPLIANCE_A
 
 from gui.custom_widgets import NoWheelSpinBox, NoWheelDoubleSpinBox, NoWheelComboBox
 from gui.plot_manager import PlotManager
@@ -51,7 +44,6 @@ class GUI(QWidget):
         self.setObjectName("Root")
 
         self.inst = InstrumentManager()
-        self.abort_flag = False
         self.results = []
         self.output_dir = os.getcwd()
         self.curves = {}
@@ -384,9 +376,7 @@ class GUI(QWidget):
 
         return group
 
-    # =========================
-    # STATUS HELPERS
-    # =========================
+    # --- UI Status & Logging Helpers ---
 
     def log_message(self, message):
         stamp = time.strftime("%H:%M:%S")
@@ -448,9 +438,7 @@ class GUI(QWidget):
             self.output_dir_field.setText(directory)
             self.log_message(f"TXT save folder set to {directory}")
 
-    # =========================
-    # PIXELS
-    # =========================
+    # --- Pixel Grid Configuration ---
 
     def build_pixels(self):
         if not hasattr(self, "pixel_grid"):
@@ -516,12 +504,9 @@ class GUI(QWidget):
         self.pixel_grid.invalidate()
         self.updateGeometry()
 
-    # =========================
-    # MEASUREMENT
-    # =========================
+    # --- Sweep Execution & Signal Slots ---
 
     def run_measurement(self):
-        self.abort_flag = False
         self.results = []
         self.table.setRowCount(0)
         self.plot_manager.clear_curves()
@@ -530,6 +515,10 @@ class GUI(QWidget):
 
         if not self.inst.keithley or not self.inst.relay:
             self.log_message("ERROR: instruments are not connected")
+            return
+
+        if hasattr(self, "worker") and self.worker.isRunning():
+            self.log_message("ERROR: a sweep is already running")
             return
 
         selected = []
@@ -541,153 +530,58 @@ class GUI(QWidget):
             self.log_message("ERROR: select at least one pixel")
             return
 
-        keithley = self.inst.keithley
-        relay = self.inst.relay
-        base_v0 = self.v0.value()
-        base_v1 = self.v1.value()
-        reverse = self.dir.currentText() == "Reverse"
-        pin = self.pin.value()
-        compliance_a = self.compliance_ma.value() / 1000
-        point_delay_s = self.point_delay.value()
-        loops = self.loops.value()
-        points = self.points.value()
-        self.plot_manager.reset_legends(selected, loops)
+        sweep_params = {
+            "v0": self.v0.value(),
+            "v1": self.v1.value(),
+            "reverse": self.dir.currentText() == "Reverse",
+            "pin": self.pin.value(),
+            "compliance_a": self.compliance_ma.value() / 1000,
+            "point_delay_s": self.point_delay.value(),
+            "loops": self.loops.value(),
+            "points": self.points.value(),
+        }
 
+        self.plot_manager.reset_legends(selected, sweep_params["loops"])
         self.set_running_state(True)
 
-        measurement_error = False
+        # Pass the active hardware connections to the background thread.
+        # To prevent connection conflicts and crashes, do not command or query
+        # the instruments from this GUI thread while the sweep is running.
+        self.worker = MeasurementWorker(self.inst.keithley, self.inst.relay, selected, sweep_params)
+        self.worker.log.connect(self.log_message)
+        self.worker.pixel_started.connect(self._on_pixel_started)
+        self.worker.pixel_result.connect(self._on_pixel_result)
+        self.worker.pixel_faulted.connect(self._on_pixel_faulted)
+        self.worker.finished_sweep.connect(self._on_sweep_finished)
+        self.worker.start()
 
-        try:
-            init_keithley(keithley, compliance_a=compliance_a, logger=self.log_message)
-            self.log_message(f"Keithley current compliance set to {compliance_a:.6f} A")
+    def _on_pixel_started(self, pixel):
+        self.current_pixel_label.setText(f"Measuring pixel: {pixel}")
 
-            for loop_idx in range(loops):
-                if self.abort_flag:
-                    break
+    def _on_pixel_result(self, record):
+        self.results.append(record)
+        V = np.asarray(record["voltage_v"], dtype=float)
+        J = np.asarray(record["current_density_ma_cm2"], dtype=float)
+        self.plot_manager.plot_curve(V, J, record["channel"], record["loop"])
+        metrics = {k: record[k] for k in ("Voc", "Jsc", "Vmpp", "Jmpp", "Pmax", "FF", "PCE")}
+        self.add_result_row(record["pixel"], record["area_cm2"], metrics, "OK", record["loop"])
 
-                self.log_message(f"Starting loop {loop_idx + 1} of {loops}")
+    def _on_pixel_faulted(self, pixel, area, fault, loop_number):
+        self.add_result_row(pixel, area, None, fault, loop_number)
 
-                for pixel, ch, area in selected:
-                    if self.abort_flag:
-                        break
+    def _on_sweep_finished(self, aborted, had_error):
+        self.current_pixel_label.setText("Measuring pixel: --")
+        self.set_running_state(False)
 
-                    relay_token = numato_relay_token(ch)
-                    self.log_message(f"Measuring pixel {pixel} on relay channel {ch} ({relay_token})")
-                    self.current_pixel_label.setText(f"Measuring pixel: {pixel}")
-                    QApplication.processEvents()
-                    keithley_output_safe(keithley)
-                    all_pixels_disconnect(relay)
-                    time.sleep(RELAY_SETTLE_S)
-                    connect_pixel(relay, ch)
-                    time.sleep(RELAY_SETTLE_S)
-                    keithley_output_enable(keithley, logger=self.log_message)
+        if aborted:
+            self.log_message("Sweep aborted")
+        elif had_error:
+            self.log_message("Sweep ended with an error")
+        else:
+            self.log_message("Sweep complete")
 
-                    sweep_start, sweep_end = (base_v1, base_v0) if reverse else (base_v0, base_v1)
-                    V = np.linspace(sweep_start, sweep_end, points)
-                    V_keithley = []
-                    I = []
-                    self.log_message(
-                        f"Sweep {pixel} device voltage: {sweep_start:.3f} V -> {sweep_end:.3f} V "
-                        f"({points} points, {'reverse' if reverse else 'forward'})"
-                    )
-
-                    for point_idx, v in enumerate(V):
-                        if self.abort_flag:
-                            break
-                        current, raw, keithley_v = keithley_read_current(keithley, v, point_delay_s)
-                        V_keithley.append(keithley_v)
-                        if point_idx == 0:
-                            self.log_message(f"First raw Keithley current response for {pixel}: {raw}")
-                        if point_idx in {0, len(V) // 2, len(V) - 1}:
-                            try:
-                                source_check = keithley_source_voltage(keithley)
-                                self.log_message(
-                                    f"{pixel} source check point {point_idx + 1}: "
-                                    f"device {v:.4f} V, Keithley command {keithley_v:.4f} V, "
-                                    f"Keithley setpoint {source_check:.4f} V"
-                                )
-                            except Exception as e:
-                                self.log_message(f"WARNING: could not query Keithley source voltage: {e}")
-                        I.append(current)
-                        QApplication.processEvents()
-
-                    keithley_output_safe(keithley)
-                    numato_command(relay, f"relay off {numato_relay_token(ch)}")
-                    time.sleep(RELAY_SETTLE_S)
-
-                    if self.abort_flag:
-                        break
-
-                    I = np.asarray(I, dtype=float)
-                    V_keithley = np.asarray(V_keithley, dtype=float)
-                    self.log_current_outliers(pixel, V, I, area)
-                    fault = check_fault(I)
-                    if fault:
-                        self.add_result_row(pixel, area, None, fault, loop_idx + 1)
-                        self.log_message(f"Pixel {pixel} flagged as {fault}")
-                        continue
-
-                    metrics = extract_parameters(V, I, area, pin)
-                    J = (I / area) * 1000
-                    self.plot_manager.plot_curve(V, J, ch, loop_idx + 1)
-
-                    record = {
-                        "pixel": pixel,
-                        "channel": ch,
-                        "loop": loop_idx + 1,
-                        "area_cm2": area,
-                        "pin_mw_cm2": pin,
-                        "voltage_v": V.tolist(),
-                        "keithley_voltage_v": V_keithley.tolist(),
-                        "current_a": I.tolist(),
-                        **metrics,
-                    }
-                    self.results.append(record)
-                    self.add_result_row(pixel, area, metrics, "OK", loop_idx + 1)
-                    self.log_message(
-                        f"Pixel {pixel}: Voc={metrics['Voc']:.3f} V, "
-                        f"Jsc={metrics['Jsc']:.3f} mA/cm^2, "
-                        f"PCE={metrics['PCE']:.2f}%"
-                    )
-
-        except Exception as e:
-            measurement_error = True
-            self.log_message(f"ERROR: measurement stopped: {e}")
-        finally:
-            try:
-                keithley_output_safe(keithley)
-                all_pixels_disconnect(relay)
-            except Exception:
-                pass
-            self.current_pixel_label.setText("Measuring pixel: --")
-            self.set_running_state(False)
-            if self.abort_flag:
-                self.log_message("Sweep aborted")
-            elif measurement_error:
-                self.log_message("Sweep ended with an error")
-            else:
-                self.log_message("Sweep complete")
-            if self.auto_save.isChecked() and self.results:
-                self.save_results(auto=True)
-
-    def log_current_outliers(self, pixel, V, I, area):
-        if len(I) < 5:
-            return
-
-        J = np.abs((I / area) * 1000)
-        finite = np.isfinite(J)
-        if not np.any(finite):
-            return
-
-        median = np.nanmedian(J[finite])
-        peak_idx = int(np.nanargmax(J))
-        peak = J[peak_idx]
-
-        if median > 0 and peak > max(5 * median, 50):
-            self.log_message(
-                f"WARNING: {pixel} current-density spike at {V[peak_idx]:.3f} V: "
-                f"{peak:.2f} mA/cm^2 vs median {median:.2f} mA/cm^2"
-            )
+        if self.auto_save.isChecked() and self.results:
+            self.save_results(auto=True)
 
     def add_result_row(self, pixel, area, metrics, status, loop_idx=None):
         r = self.table.rowCount()
@@ -741,5 +635,6 @@ class GUI(QWidget):
         self.exporter.save_results(self.results, auto=auto)
 
     def abort_measurement(self):
-        self.abort_flag = True
-        self.log_message("Abort requested")
+        if hasattr(self, "worker") and self.worker.isRunning():
+            self.worker.request_abort()
+            self.log_message("Abort requested")
