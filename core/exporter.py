@@ -59,7 +59,9 @@ class ResultsExporter:
         with open(path, "w") as f:
             f.write(
                 "# loop\tpixel\tarea_cm2\tVoc_V\tJsc_mA_cm2\tFF\t"
-                "PCE_percent\tVmpp_V\tJmp_mA_cm2\tPmax_mW_cm2\tstatus\n"
+                "PCE_percent\tVmpp_V\tJmp_mA_cm2\tPmax_mW_cm2\t"
+                "Rs_diode_eq_ohm\tRsh_diode_eq_ohm\tRs_derivative_ohm\tRsh_derivative_ohm\t"
+                "status\n"
             )
             for row in rows:
                 f.write(
@@ -73,6 +75,10 @@ class ResultsExporter:
                     f"{row['Vmpp']:.8g}\t"
                     f"{row['Jmpp']:.8g}\t"
                     f"{row['Pmax']:.8g}\t"
+                    f"{row.get('Rs_diode_eq', float('nan')):.8g}\t"
+                    f"{row.get('Rsh_diode_eq', float('nan')):.8g}\t"
+                    f"{row.get('Rs_derivative', float('nan')):.8g}\t"
+                    f"{row.get('Rsh_derivative', float('nan')):.8g}\t"
                     "OK\n"
                 )
         return path
