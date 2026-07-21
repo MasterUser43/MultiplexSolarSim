@@ -18,7 +18,7 @@ class InstrumentManager:
         self.relay = None
 
         try:
-            self.keithley = find_keithley()
+            self.keithley = find_keithley(logger=logger)
             if logger:
                 logger("OK: Keithley connected")
         except Exception as e:
@@ -26,7 +26,7 @@ class InstrumentManager:
                 logger(f"ERROR: Keithley connection failed: {e}")
 
         try:
-            self.relay = find_numato()
+            self.relay = find_numato(logger=logger)
             if logger:
                 logger(f"OK: Numato relay connected on {self.relay.port}")
         except Exception as e:
