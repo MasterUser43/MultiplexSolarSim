@@ -32,4 +32,7 @@ REM Use 'python' instead of 'pythonw' below if you want a live console
 REM window instead of (or in addition to) the log file.
 start "" /B pythonw main.py %* > "%LOGFILE%" 2>&1
 
+echo [INFO] Launched, please be patient. This window will close automatically...
+timeout /t 2 /nobreak >nul
+
 exit /b 0

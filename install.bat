@@ -46,10 +46,13 @@ echo [INFO] Activating environment and installing packages...
 call .venv\Scripts\activate.bat
 
 REM --- Python packages ---
-python -m pip install --upgrade pip -q
-pip install -r requirements.txt -q
+echo [INFO] This may take a few minutes on first run while packages download.
+echo.
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 if errorlevel 1 (
-    echo [ERROR] Failed to install Python dependencies. 
+    echo.
+    echo [ERROR] Failed to install Python dependencies. See the messages above for details.
     pause
     exit /b 1
 )
@@ -74,6 +77,10 @@ if "%NIVISA_FOUND%"=="1" (
 echo.
 echo ====================================================
 echo [SUCCESS] Installation complete.
-echo To start the application, run: run.bat
+echo.
+echo   To start the application, double-click:  run.bat
+echo.
 echo ====================================================
-pause
+echo.
+echo Press any key to close this window.
+pause >nul
