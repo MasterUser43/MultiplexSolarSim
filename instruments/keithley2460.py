@@ -171,3 +171,101 @@ def keithley_read_current(k, device_voltage, point_delay_s):
     k.write(":READ?")
     raw = k.read().strip()
     return parse_keithley_current(raw), raw, keithley_voltage
+
+
+# Fixed voltage source ranges available on the 2460 (see datasheet
+# "Voltage Specifications" table). Source ranging on this instrument is
+# fixed, so a range must be selected b/f sourcing.
+KEITHLEY_VOLTAGE_SOURCE_RANGES = [0.2, 2, 7, 10, 20, 100]
+
+
+def keithley_select_voltage_range(max_abs_voltage):
+    for r in KEITHLEY_VOLTAGE_SOURCE_RANGES:
+        if max_abs_voltage <= r:
+            return r
+    return KEITHLEY_VOLTAGE_SOURCE_RANGES[-1]
+
+
+def keithley_run_onchip_sweep(
+    k,
+    device_v_start,
+    device_v_stop,
+    points,
+    source_delay_s,
+    compliance_a=KEITHLEY_DEFAULT_COMPLIANCE_A,
+    logger=None,
+):
+    """
+    Runs a linear voltage sweep on the Keithley's trigger model
+
+    Keithley's "IV Characterization of Photovoltaic Cells and Panels"
+    application note (Tektronix doc 1KW-74075-1, Appendix B):
+
+        SENS:FUNC "CURR"
+        SENS:CURR:RANG:AUTO ON
+        SOUR:FUNC VOLT
+        SOUR:VOLT:RANG <range>
+        SOUR:VOLT:ILIM <compliance>
+        SOUR:SWE:VOLT:LIN <start>, <stop>, <points>, <delay>
+        :INIT
+        *WAI
+        TRAC:DATA? 1, <points>, "defbuffer1", SOUR, READ
+
+
+    Intentionally NOT enabling 4-wire remote sense (SENS:CURR:RSEN ON): 
+    the Numato relay only routes a single 2-wire path (NO/C/NC) per pixel, 
+    not a separate sense pair, which invalidates 4-wire sensing approach.
+
+    Returns (device_voltage, current) as parallel lists, in the order
+    requested (device_v_start -> device_v_stop).
+    """
+    keithley_v_start = keithley_voltage_for_device_voltage(device_v_start)
+    keithley_v_stop = keithley_voltage_for_device_voltage(device_v_stop)
+
+    voltage_range = keithley_select_voltage_range(
+        max(abs(keithley_v_start), abs(keithley_v_stop))
+    )
+    compliance_a = max(float(compliance_a), 1e-9)
+
+    keithley_write_checked(k, ':SENS:FUNC "CURR"', logger=logger)
+    keithley_write_checked(k, ":SENS:CURR:RANG:AUTO ON", logger=logger)
+    keithley_write_checked(k, ":SOUR:FUNC VOLT", logger=logger)
+    keithley_write_checked(k, f":SOUR:VOLT:RANG {voltage_range}", logger=logger)
+    keithley_write_checked(k, f":SOUR:VOLT:ILIM {compliance_a}", logger=logger)
+
+    sweep_cmd = (
+        f":SOUR:SWE:VOLT:LIN {keithley_v_start}, {keithley_v_stop}, "
+        f"{points}, {source_delay_s}"
+    )
+    keithley_write_checked(k, sweep_cmd, logger=logger)
+    if logger:
+        logger(f"On-chip sweep configured: {sweep_cmd}")
+
+    # Extend timeout to ensure the sweep completes before a VISA timeout occurs.
+    expected_sweep_s = points * source_delay_s
+    try:
+        k.timeout = max(int(expected_sweep_s * 1000) + 5000, 5000)
+    except Exception:
+        if logger:
+            logger("WARNING: could not adjust instrument timeout for sweep duration")
+
+    k.write(":INIT")
+    k.write("*WAI")
+    keithley_log_errors(k, logger=logger, context="On-chip sweep")
+
+    raw = k.query(f'TRAC:DATA? 1, {points}, "defbuffer1", SOUR, READ')
+    values = [float(v) for v in raw.strip().split(",")]
+
+    if len(values) != points * 2:
+        raise RuntimeError(
+            f"Unexpected buffer read: expected {points * 2} values "
+            f"(source+read pairs), got {len(values)}. Raw: {raw!r}"
+        )
+
+    keithley_voltages = values[0::2]
+    currents = values[1::2]
+    # Undo the device-voltage/Keithley-voltage sign convention used when
+    # building the sweep command above.
+    device_voltages = [v / KEITHLEY_VOLTAGE_FROM_DEVICE_VOLTAGE for v in keithley_voltages]
+
+    return device_voltages, currents
