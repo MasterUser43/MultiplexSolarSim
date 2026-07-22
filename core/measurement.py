@@ -1,12 +1,13 @@
 """
-Background sweep worker (QThread) and pixel configuration.
+Pixel/channel configuration and the background sweep worker.
 
-Thread Safety & Hardware Rules:
-  1. Don't touch the Keithley or Relay from the GUI thread while a sweep is running. 
-     Only one thread can talk to the instruments at a time.
-  2. Never modify GUI widgets directly from this thread. Use Qt signals instead.
-  3. Keep the sweep loop inside a try/finally block so the Keithley output and 
-     relays are safely turned off if the sweep is aborted or hits an error.
+Threading Contract:
+  - The GUI hands open instrument objects to the Worker.
+    The GUI must not access these instruments until the finished_sweep signal fires.
+  - The Worker never touches PyQt widgets. All updates are sent via signals to be handled 
+    by the GUI thread.
+  - worker.request_abort() sets a flag checked between points/pixels. The Worker's 
+    try/finally block ensures hardware is safely safed even if aborted or faulted.
 """
 import time
 
@@ -18,8 +19,8 @@ from instruments.keithley2460 import (
     init_keithley,
     keithley_output_safe,
     keithley_output_enable,
-    keithley_read_current,
-    keithley_source_voltage,
+    keithley_run_onchip_sweep,
+    KEITHLEY_VOLTAGE_FROM_DEVICE_VOLTAGE,
 )
 from instruments.numato_relay import (
     RELAY_SETTLE_S,
@@ -106,12 +107,9 @@ class MeasurementWorker(QThread):
                     self.log.emit(f"Measuring pixel {pixel} on relay channel {ch} ({relay_token})")
                     self.pixel_started.emit(pixel)
 
-                    # --- HARDWARE INTERLOCK: SAFE SWITCHING SEQUENCE ---
-                    # To prevent relay arcing and protect the solar cell:
-                    # 1. Bring Keithley to 0V and turn output OFF.
-                    # 2. Isolate all pixels to open-circuit.
-                    # 3. Wait for mechanical contacts to physically settle (RELAY_SETTLE_S).
-                    # 4. Connect target pixel, wait again, and only then enable Keithley output.
+                    # --- Cold-Switching Sequence ---
+                    # To prevent relay arcing and protect the DUT from voltage spikes:
+                    # Ensure 0V/Output OFF before switching mechanical relay contacts.
 
                     keithley_output_safe(self.keithley)
                     all_pixels_disconnect(self.relay)
@@ -120,42 +118,30 @@ class MeasurementWorker(QThread):
                     time.sleep(RELAY_SETTLE_S)
                     keithley_output_enable(self.keithley, logger=self.log.emit)
 
-                    # --- ACTIVE VOLTAGE SWEEP LOOP ---
                     sweep_start, sweep_end = (p["v1"], p["v0"]) if p["reverse"] else (p["v0"], p["v1"])
-                    V = np.linspace(sweep_start, sweep_end, p["points"])
-                    V_keithley = []
-                    I = []
                     self.log.emit(
                         f"Sweep {pixel} device voltage: {sweep_start:.3f} V -> {sweep_end:.3f} V "
-                        f"({p['points']} points, {'reverse' if p['reverse'] else 'forward'})"
+                        f"({p['points']} points, {'reverse' if p['reverse'] else 'forward'}, on-chip)"
                     )
 
-                    for point_idx, v in enumerate(V):
-                        if self._abort:
-                            break
-                        current, raw, keithley_v = keithley_read_current(
-                            self.keithley, v, p["point_delay_s"]
-                        )
-                        V_keithley.append(keithley_v)
-
-                        # Print raw responses for debugging first and intermediate points
-
-                        if point_idx == 0:
-                            self.log.emit(f"First raw Keithley current response for {pixel}: {raw}")
-                        if point_idx in {0, len(V) // 2, len(V) - 1}:
-                            try:
-                                source_check = keithley_source_voltage(self.keithley)
-                                self.log.emit(
-                                    f"{pixel} source check point {point_idx + 1}: "
-                                    f"device {v:.4f} V, Keithley command {keithley_v:.4f} V, "
-                                    f"Keithley setpoint {source_check:.4f} V"
-                                )
-                            except Exception as e:
-                                self.log.emit(f"WARNING: could not query Keithley source voltage: {e}")
-                        I.append(current)
-
-                    # --- POST-SWEEP SAFE STATE ---
-                    # Immediately kill output and isolate the relay contacts
+                    # Run hardware-timed sweep. Note: This blocks until completion, 
+                    # meaning the abort signal is only checked between pixel sweeps.
+                    V_list, I_list = keithley_run_onchip_sweep(
+                        self.keithley,
+                        sweep_start,
+                        sweep_end,
+                        p["points"],
+                        p["point_delay_s"],
+                        compliance_a=p["compliance_a"],
+                        logger=self.log.emit,
+                    )
+                    V = np.asarray(V_list, dtype=float)
+                    I = np.asarray(I_list, dtype=float)
+                    V_keithley = V * KEITHLEY_VOLTAGE_FROM_DEVICE_VOLTAGE
+                    self.log.emit(
+                        f"{pixel}: on-chip sweep returned {len(V)} points, "
+                        f"V {V.min():.4f}..{V.max():.4f} V, I {I.min():.6g}..{I.max():.6g} A"
+                    )
 
                     keithley_output_safe(self.keithley)
                     numato_command(self.relay, f"relay off {numato_relay_token(ch)}")
@@ -164,11 +150,7 @@ class MeasurementWorker(QThread):
                     if self._abort:
                         break
 
-                    I = np.asarray(I, dtype=float)
-                    V_keithley = np.asarray(V_keithley, dtype=float)
                     self._log_current_outliers(pixel, V, I, area)
-
-                    # Check for short or open circuit faults before doing math
 
                     fault = check_fault(I)
                     if fault:
