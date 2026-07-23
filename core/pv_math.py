@@ -147,12 +147,10 @@ def single_diode_model_current(params, V, vt):
 def diode_fit_resistances(V, I):
     """Fit the single-diode model to a JV curve and return (Rs, Rsh).
 
-    Slower/More physically grounded than derivative_resistances():
-    it fits all five diode parameters simultaneously via bounded
-    least-squares, then reports just the two resistances per caller request.
-    
-    Returns (nan, nan) if there isn't enough data or the fit fails
-    to converge, which isn't an error.
+    Uses bounded least-squares to fit the five-parameter diode model. 
+    To improve convergence, I0 and Rsh are optimized in log10-space.
+
+    Returns (Rs, Rsh) in Ohms. Returns (nan, nan) if the fit fails.
     """
     V = np.asarray(V, dtype=float)
     I = np.asarray(I, dtype=float)
@@ -166,22 +164,29 @@ def diode_fit_resistances(V, I):
 
     vt = 0.02585    # thermal voltage at room temperature
 
-    x0 = [
-        np.max(I),  # Iph guess
-        1e-10,      # I0 guess
-        1.5,        # n guess
-        20,         # Rs guess
-        1e5,        # Rsh guess
-    ]
-    lower = [0, 1e-15, 1.0, 0, 10]
-    upper = [1, 1e-3, 4.0, 1e4, 1e9]
+    # Unpack log-space parameters [Iph, log10(I0), n, Rs, log10(Rsh)]
+    def unpack(x):
+        Iph, log_I0, n, Rs, log_Rsh = x
+        return [Iph, 10 ** log_I0, n, Rs, 10 ** log_Rsh]
 
-    def residuals(params):
+    # Initial guesses and bounds
+    x0 = [
+        max(np.max(I), 1e-9),  # Iph guess
+        -10.0,                 # log10(I0) guess  (I0 ~ 1e-10)
+        1.5,                   # n guess
+        20,                    # Rs guess
+        5.0,                   # log10(Rsh) guess (Rsh ~ 1e5)
+    ]
+    lower = [0, -15, 1.0, 0, 1]
+    upper = [1, -3, 4.0, 1e4, 9]
+
+    # Dynamically size f_scale to 1% of current range to prevent loss saturation
+    f_scale = max(0.01 * np.max(np.abs(I)), 1e-12)
+
+    def residuals(params_x):
         try:
-            modeled = single_diode_model_current(params, V, vt)
-            r = modeled - I
-            scale = np.median(np.abs(r)) + 1e-12
-            return np.tanh(r / (5 * scale))
+            modeled = single_diode_model_current(unpack(params_x), V, vt)
+            return modeled - I
         except Exception:
             return np.ones_like(I) * 1e6
 
@@ -191,12 +196,14 @@ def diode_fit_resistances(V, I):
             x0,
             bounds=(lower, upper),
             loss="soft_l1",
-            f_scale=1e-6,
-            max_nfev=500,
+            f_scale=f_scale,
+            max_nfev=2000,
+            x_scale="jac",
         )
 
-        Rs = result.x[3]
-        Rsh = result.x[4]
+        Iph, I0, n, Rs, Rsh = unpack(result.x)
+
+        # Clip Rsh to a sensible physical maximum
         if Rsh > 1e8:
             Rsh = 1e8
 
