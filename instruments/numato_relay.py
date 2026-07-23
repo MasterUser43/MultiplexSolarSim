@@ -3,6 +3,7 @@ Numato 16-channel USB relay driver: board auto-detection and channel
 on/off commands.
 """
 import time
+import re
 
 import serial
 import serial.tools.list_ports
@@ -14,7 +15,7 @@ NUMATO_RELAY_COUNT = 16
 RELAY_SETTLE_S = 0.15
 
 
-def find_numato():
+def find_numato(logger=None):
     ports = list(serial.tools.list_ports.comports())
     preferred_ports = [
         p for p in ports
@@ -32,10 +33,39 @@ def find_numato():
             )
             if hasattr(ser, "reset_input_buffer"):
                 ser.reset_input_buffer()
-            return ser
+
+            if _confirm_numato(ser, logger=logger):
+                return ser
+
+            if logger:
+                logger(f"{p.device} opened but did not respond like a Numato relay -- skipping")
+            ser.close()
         except Exception:
             continue
     raise RuntimeError("Relay not found")
+
+
+def _confirm_numato(ser, logger=None):
+    """Send a real protocol command and require a real-looking reply
+    before trusting this port.
+    """
+    try:
+        response = numato_command(ser, "relay readall")
+    except Exception as e:
+        if logger:
+            logger(f"Handshake with {ser.port} failed: {e}")
+        return False
+
+    if logger:
+        logger(f"Handshake response from {ser.port}: {response!r}")
+
+    # A working board replies with a hex status string for its relay bank
+    # (e.g. "0000" for all-off on a 16-channel board). An empty string
+    # (timeout, nothing answered) or non-hex garbage means this port isn't
+    # actually a Numato relay, regardless of whether it opened.
+    cleaned = response.replace("\r", "")
+    match = re.search(r"^[0-9a-fA-F]{2,8}$", cleaned, re.MULTILINE)
+    return bool(match)
 
 
 def numato_relay_token(ch):

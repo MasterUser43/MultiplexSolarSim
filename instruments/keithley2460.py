@@ -18,16 +18,50 @@ KEITHLEY_OUTPUT_SETTLE_S = 0.15
 KEITHLEY_VOLTAGE_FROM_DEVICE_VOLTAGE = -1.0
 
 
-def find_keithley():
-    rm = pyvisa.ResourceManager()
-    for r in rm.list_resources():
+def find_keithley(resource_name=None, logger=None):
+    """
+    Locates the Keithley 2460.
+    """
+    backend_note = "NI-VISA"
+    try:
+        # 1. Try to use the standard NI-VISA backend (the 800MB driver)
+        rm = pyvisa.ResourceManager()
+    except Exception:
+        # 2. Fallback: Use the 'pyvisa-py' backend
+        backend_note = "pyvisa-py (self-contained)"
+        try:
+            import libusb_package
+            rm = pyvisa.ResourceManager('@py')
+        except Exception:
+            raise RuntimeError(
+                "No VISA driver found. Please run install.bat to set up "
+                "local drivers or install NI-VISA."
+            )
+
+    if logger:
+        logger(f"VISA backend: {backend_note}")
+
+    # If the user provided a specific ID (like 'USB0::0x05E6::...'), use it directly
+    if resource_name:
+        return rm.open_resource(resource_name)
+
+    # 3. Discovery Loop: USB instruments only.
+    for r in rm.list_resources('USB?*::INSTR'):
         try:
             inst = rm.open_resource(r)
-            if "KEITHLEY" in inst.query("*IDN?").upper():
+            inst.timeout = 2000 # 2-second limit
+            
+            idn = inst.query("*IDN?").upper()
+            
+            # Look for Keithley and the specific model number 2460
+            if "KEITHLEY" in idn and "2460" in idn:
                 return inst
+            
+            inst.close() # Close connection if it's not the right device
         except Exception:
             continue
-    raise RuntimeError("Keithley not found")
+            
+    raise RuntimeError("Keithley 2460 not found. Check USB connection and power.")
 
 
 def keithley_system_error(k):

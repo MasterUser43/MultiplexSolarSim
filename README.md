@@ -1,29 +1,35 @@
 # Multiplex Solar Simulator - IV Characterization
 
+**[Overview](README.md)** | **[Setup & Deployment Guide](DEPLOYMENT.md)** | **[Troubleshooting](DEPLOYMENT.md#troubleshooting-checklist)**
+___
+
 Python/PyQt5 GUI for automated multi-pixel solar cell IV characterization. Integrates a **Keithley 2460 SMU** and a **Numato 16-channel USB relay** for multiplexed testing.
 
 ## Hardware Requirements
-1. **Keithley 2460 SourceMeter** (USB).
+1. **Keithley 2460 SourceMeter** (Connected via USB or Ethernet).
 2. **Numato 16-Channel USB Relay Board**.
-3. **NI-VISA Runtime:** Essential for SMU communication. [Download here](https://www.ni.com/en-us/support/downloads/drivers/download.ni-visa.html).
+3. **Python 3.10+** (Ensure "Add to PATH" is checked during Windows install).
 
-## Driver & Setup Notes
-- **Numato Relay:** On Linux, the relay usually works out-of-the-box as a CDC-ACM device (`/dev/ttyACM0`). If the device is not recognized or you are moving to Windows, you may need the Numato CDC drivers. Drivers can be found on the [Numato Lab Website](https://numato.com/product/16-channel-usb-relay-module#downloads).
+---
 
 ## Installation
-1. Clone the repository:
-```bash
-   git clone https://github.com/MasterUser43/MultiplexSolarSim.git
-   cd MultiplexSolarSim
-```
 
-2. Install Python dependencies:
-```bash
-   pip install -r requirements.txt
-```
+The Multiplex Solar Simulator features a **Zero-Config** installation process. It is designed to run in IT-managed lab environments where administrative privileges are restricted.
 
-## Usage
-```bash
-   python main.py
-```
+### Windows (Primary)
+1. Ensure Python 3.10+ is installed.
+2. Double-click **`install.bat`**. This creates a local virtual environment and sets up portable drivers inside the project folder.
+3. Run the application with **`run.bat`**.
 
+### Linux
+1. Run `bash install.sh` in your terminal. 
+2. Follow the interactive prompts to grant USB and Serial permissions (one-time setup).
+3. Run the application with `bash run.sh`.
+
+---
+
+This project uses a **Self-Contained Hardware Backend**. If the system-wide NI-VISA driver is missing, the app automatically falls back to a portable Python-based driver (`pyvisa-py`).
+
+## Documentation & Support
+*   **Need help with permissions or COM ports?** See the **[Deployment Guide](DEPLOYMENT.md)**.
+*   **Something not connecting?** Check the **[Troubleshooting Checklist](DEPLOYMENT.md#troubleshooting-checklist)**.
