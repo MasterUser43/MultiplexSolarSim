@@ -3,6 +3,7 @@ Numato 16-channel USB relay driver: board auto-detection and channel
 on/off commands.
 """
 import time
+import re
 
 import serial
 import serial.tools.list_ports
@@ -62,7 +63,9 @@ def _confirm_numato(ser, logger=None):
     # (e.g. "0000" for all-off on a 16-channel board). An empty string
     # (timeout, nothing answered) or non-hex garbage means this port isn't
     # actually a Numato relay, regardless of whether it opened.
-    return bool(response) and all(c in "0123456789ABCDEFabcdef" for c in response)
+    cleaned = response.replace("\r", "")
+    match = re.search(r"^[0-9a-fA-F]{2,8}$", cleaned, re.MULTILINE)
+    return bool(match)
 
 
 def numato_relay_token(ch):
