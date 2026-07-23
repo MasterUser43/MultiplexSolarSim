@@ -1,5 +1,5 @@
 """
-Main window (PyQt5) for the Multiplex Solar Simulator J-V characterization app.
+Main window for the Multiplex Solar Simulator IV characterization app.
 
 Responsibilities:
   - GUI Layout: Builds the control panels, J-V plot manager, and results table.
@@ -333,10 +333,12 @@ class GUI(QWidget):
         layout.setContentsMargins(12, 18, 12, 12)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(11)
+        self.table.setColumnCount(15)
         self.table.setHorizontalHeaderLabels(
             ["Loop", "Pixel", "Area", "Voc (V)", "Jsc (mA/cm^2)", "FF",
-             "PCE (%)", "Vmpp (V)", "Jmp (mA/cm^2)", "Pmax (mW/cm^2)", "Status"]
+             "PCE (%)", "Vmpp (V)", "Jmp (mA/cm^2)", "Pmax (mW/cm^2)",
+             "Rs fit (\u03a9)", "Rsh fit (\u03a9)", "Rs deriv (\u03a9)", "Rsh deriv (\u03a9)",
+             "Status"]
         )
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -563,7 +565,11 @@ class GUI(QWidget):
         V = np.asarray(record["voltage_v"], dtype=float)
         J = np.asarray(record["current_density_ma_cm2"], dtype=float)
         self.plot_manager.plot_curve(V, J, record["channel"], record["loop"])
-        metrics = {k: record[k] for k in ("Voc", "Jsc", "Vmpp", "Jmpp", "Pmax", "FF", "PCE")}
+        metric_keys = (
+            "Voc", "Jsc", "Vmpp", "Jmpp", "Pmax", "FF", "PCE",
+            "Rs_diode_eq", "Rsh_diode_eq", "Rs_derivative", "Rsh_derivative",
+        )
+        metrics = {k: record[k] for k in metric_keys}
         self.add_result_row(record["pixel"], record["area_cm2"], metrics, "OK", record["loop"])
 
     def _on_pixel_faulted(self, pixel, area, fault, loop_number):
@@ -602,9 +608,13 @@ class GUI(QWidget):
                 self.format_metric(metrics["Vmpp"], 3),
                 self.format_metric(metrics["Jmpp"], 3),
                 self.format_metric(metrics["Pmax"], 3),
+                self.format_resistance(metrics.get("Rs_diode_eq")),
+                self.format_resistance(metrics.get("Rsh_diode_eq")),
+                self.format_resistance(metrics.get("Rs_derivative")),
+                self.format_resistance(metrics.get("Rsh_derivative")),
             ])
         else:
-            values.extend(["--", "--", "--", "--", "--", "--", "--"])
+            values.extend(["--"] * 11)
 
         values.append(status)
 
@@ -616,15 +626,23 @@ class GUI(QWidget):
 
             self.table.setItem(r, col, item)
 
-        # Force visual refresh
-        self.table.viewport().update()
-        QApplication.processEvents()
-
     @staticmethod
     def format_metric(value, decimals):
         if value is None or not np.isfinite(value):
             return "--"
         return f"{value:.{decimals}f}"
+
+    @staticmethod
+    def format_resistance(value):
+        # Rs typically single/double-digit ohms, Rsh can run into the
+        # hundred-thousands or more -- fixed decimals would either
+        # truncate Rs or turn Rsh into a wall of digits, so switch to
+        # scientific notation outside a comfortable fixed-point range.
+        if value is None or not np.isfinite(value):
+            return "--"
+        if abs(value) >= 1000 or (0 < abs(value) < 0.01):
+            return f"{value:.3e}"
+        return f"{value:.2f}"
 
 
     def save_results(self, auto=False):
