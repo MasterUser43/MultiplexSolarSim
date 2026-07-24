@@ -162,7 +162,7 @@ def diode_fit_resistances(V, I):
     if len(V) < 10:
         return np.nan, np.nan
 
-    vt = 0.02585    # thermal voltage at room temperature
+    vt = 0.02585  # thermal voltage at room temperature
 
     # Unpack log-space parameters [Iph, log10(I0), n, Rs, log10(Rsh)]
     def unpack(x):

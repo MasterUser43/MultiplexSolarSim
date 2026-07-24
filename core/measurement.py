@@ -13,7 +13,7 @@ import time
 import numpy as np
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from core.pv_math import extract_parameters, check_fault
+from core.pv_math import full_iv_report, check_fault
 from instruments.keithley2460 import (
     init_keithley,
     keithley_output_safe,
@@ -177,7 +177,7 @@ class MeasurementWorker(QThread):
                         continue
 
                     # Extract J-V metrics and dispatch them to the GUI
-                    metrics = extract_parameters(V, I, area, p["pin"])
+                    metrics = full_iv_report(V, I, area, p["pin"])
                     J = (I / area) * 1000
 
                     record = {
@@ -204,7 +204,7 @@ class MeasurementWorker(QThread):
             self.log.emit(f"ERROR: measurement stopped: {e}")
         finally:
             # --- GUARANTEED HARDWARE TEARDOWN ---
-            # Ensures relays and Keithley default back to off, even on catastrophic crash or abort
+            # Ensures relays and Keithley default back to off, even on crash or abort
             try:
                 keithley_output_safe(self.keithley)
                 all_pixels_disconnect(self.relay)
