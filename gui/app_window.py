@@ -62,34 +62,46 @@ class GUI(QWidget):
         main.setContentsMargins(14, 14, 14, 14)
         main.setSpacing(10)
 
+        # 1. Header stays visible at the top
         main.addWidget(self.build_header())
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(6)
+        # 2. Main Tab Widget
+        self.tabs = QTabWidget()
+        main.addWidget(self.tabs, 1)
 
-        left_panel = QWidget()
-        left_panel.setMinimumWidth(760)
-        left_panel.setMaximumWidth(820)
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(8)
-        left_layout.addWidget(self.build_pixel_panel(), 1)
-        left_layout.addWidget(self.build_sweep_panel(), 0)
-        splitter.addWidget(left_panel)
+        # TAB 1: CONFIGURATION
+        config_tab = QWidget()
+        config_layout = QHBoxLayout(config_tab)
+        config_layout.setSpacing(15)
+        config_layout.addWidget(self.build_sweep_panel(), 1)
+        config_layout.addWidget(self.build_pixel_panel(), 2)
+        self.tabs.addTab(config_tab, "1. CONFIGURATION")
 
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(6)
-        right_layout.addWidget(self.build_plot_panel(), 2)
-        right_layout.addWidget(self.build_results_panel(), 5)
-        splitter.addWidget(right_panel)
+        # TAB 2: LIVE SWEEP
+        live_tab = QWidget()
+        live_layout = QHBoxLayout(live_tab)
+        live_layout.addWidget(self.build_plot_panel(), 3)
+        # HUD to be added
+        self.tabs.addTab(live_tab, "2. LIVE SWEEP")
 
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        main.addWidget(splitter, 1)
+        # TAB 3: RESULTS GALLERY
+        results_tab = QWidget()
+        results_layout = QVBoxLayout(results_tab)
+        results_layout.addWidget(self.build_results_panel())
+        self.tabs.addTab(results_tab, "3. RESULTS GALLERY")
 
-        main.addWidget(self.build_log_panel())
+        # TAB 4: SYSTEM LOGS
+        logs_tab = QWidget()
+        logs_layout = QVBoxLayout(logs_tab)
+        logs_layout.addWidget(self.build_log_panel())
+        self.tabs.addTab(logs_tab, "4. SYSTEM LOGS")
+
+        # 3. Global Progress Bar (Hidden until sweep starts)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFixedHeight(12)
+        main.addWidget(self.progress_bar)
 
     def build_header(self):
         header = QFrame()
@@ -186,7 +198,6 @@ class GUI(QWidget):
 
     def build_sweep_panel(self):
         group = QGroupBox("Sweep Setup")
-        group.setFixedHeight(395)
         layout = QVBoxLayout(group)
         layout.setContentsMargins(14, 24, 14, 16)
         layout.setSpacing(14)
@@ -373,7 +384,6 @@ class GUI(QWidget):
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMaximumHeight(40)
         layout.addWidget(self.log)
 
         return group
