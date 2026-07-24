@@ -132,39 +132,76 @@ class GUI(QWidget):
     def build_header(self):
         header = QFrame()
         header.setObjectName("Header")
-        header.setFixedHeight(72)
+        header.setFixedHeight(64)
 
         layout = QHBoxLayout(header)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(14)
+        layout.setContentsMargins(20, 8, 20, 8)
+        layout.setSpacing(15)
 
-        title_block = QVBoxLayout()
-        title = QLabel("Multiplex Solar Simulator")
-        title.setObjectName("Title")
-        subtitle = QLabel("IV acquisition, multiplexing, and PV metrics")
-        subtitle.setObjectName("Subtitle")
-        title_block.addWidget(title)
-        title_block.addWidget(subtitle)
-        layout.addLayout(title_block, 0)
+        # Brand Title
+        self.brand_title = QLabel("MULTIPLEX SIM")
+        self.brand_title.setStyleSheet("font-weight: 850; font-size: 14pt; color: #38bdf8; letter-spacing: 1px; border: none;")
+        layout.addWidget(self.brand_title)
+        
+        layout.addSpacing(10)
 
-        self.keithley_status = QLabel("Keithley: not connected")
-        self.relay_status = QLabel("Relay: not connected")
-        self.keithley_status.setProperty("status", "idle")
-        self.relay_status.setProperty("status", "idle")
-        layout.addWidget(self.keithley_status)
-        layout.addWidget(self.relay_status)
+        # Keithley LED
+        self.keithley_led = QLabel()
+        self.keithley_led.setObjectName("StatusLED")
+        self.keithley_led.setProperty("status", "idle")
+        layout.addWidget(self.keithley_led)
+        
+        self.keithley_lbl = QLabel("KEITHLEY 2460")
+        self.keithley_lbl.setObjectName("StatusLabel")
+        self.keithley_lbl.setProperty("status", "idle")
+        layout.addWidget(self.keithley_lbl)
 
+        layout.addSpacing(5)
+
+        # Relay LED
+        self.relay_led = QLabel()
+        self.relay_led.setObjectName("StatusLED")
+        self.relay_led.setProperty("status", "idle")
+        layout.addWidget(self.relay_led)
+        
+        self.relay_lbl = QLabel("RELAY MATRIX")
+        self.relay_lbl.setObjectName("StatusLabel")
+        self.relay_lbl.setProperty("status", "idle")
+        layout.addWidget(self.relay_lbl)
+
+        layout.addSpacing(10)
+
+        # Connection Button starts as "Connect Instruments"
         self.connect_btn = QPushButton("Connect Instruments")
-        self.connect_btn.setObjectName("PrimaryButton")
+        self.connect_btn.setMinimumHeight(32)
         self.connect_btn.clicked.connect(self.connect_instruments)
         layout.addWidget(self.connect_btn)
 
-        # --- Theme Toggle Button ---
-        self.theme_btn = QPushButton("☀️") if self.is_dark_mode else QPushButton("🌙")
+        layout.addStretch(1)
+
+        # Right Side Inputs (Sample ID & Browse)
+        self.sample_lbl = QLabel("Sample ID:")
+        self.sample_lbl.setStyleSheet("font-weight: bold; font-size: 11px; color: #94a3b8; border: none;")
+        layout.addWidget(self.sample_lbl)
+
+        self.file = QLineEdit("Sample_Batch_01")
+        self.file.setFixedWidth(180)
+        self.file.setMinimumHeight(32)
+        layout.addWidget(self.file)
+
+        self.browse_dir_btn = QPushButton("Browse...")
+        self.browse_dir_btn.setObjectName("PrimaryButton")
+        self.browse_dir_btn.setMinimumHeight(32)
+        self.browse_dir_btn.clicked.connect(self.choose_output_dir)
+        layout.addWidget(self.browse_dir_btn)
+
+        # Theme Toggle
+        self.theme_btn = QPushButton("☀️" if self.is_dark_mode else "🌙")
+        self.theme_btn.setObjectName("ThemeButton")
+        self.theme_btn.setFixedSize(36, 36)
+        self.theme_btn.setCursor(Qt.PointingHandCursor)
         self.theme_btn.clicked.connect(self.toggle_theme)
         layout.addWidget(self.theme_btn)
-
-        layout.addStretch(1)
 
         return header
 
@@ -432,26 +469,34 @@ class GUI(QWidget):
         return group
 
     def build_log_panel(self):
-        group = QGroupBox("Run Log")
+        group = QGroupBox("System Event Log")
         layout = QVBoxLayout(group)
-        layout.setContentsMargins(12, 18, 12, 10)
-        layout.setSpacing(8)
-
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Sample ID"))
-        self.file = QLineEdit("Sample")
-        top.addWidget(self.file, 1)
-        top.addWidget(QLabel("Save folder"))
-        self.output_dir_field = QLineEdit(self.output_dir)
-        self.output_dir_field.setReadOnly(True)
-        top.addWidget(self.output_dir_field, 2)
-        self.browse_dir_btn = QPushButton("Browse...")
-        self.browse_dir_btn.clicked.connect(self.choose_output_dir)
-        top.addWidget(self.browse_dir_btn)
-        layout.addLayout(top)
+        layout.setContentsMargins(16, 20, 16, 16)
+        layout.setSpacing(12)
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
+        
+        # Top Control Bar inside Log Tab
+        top = QHBoxLayout()
+        
+        top.addWidget(QLabel("Save Directory:"))
+        self.output_dir_field = QLineEdit(self.output_dir)
+        self.output_dir_field.setReadOnly(True)
+        top.addWidget(self.output_dir_field, 1)
+
+        # Export .TXT Button
+        self.export_log_btn = QPushButton("Export .TXT")
+        self.export_log_btn.clicked.connect(self.export_log_data)
+        top.addWidget(self.export_log_btn)
+
+        # Clear Button
+        self.clear_log_btn = QPushButton("Clear Log")
+        self.clear_log_btn.clicked.connect(self.log.clear)
+        top.addWidget(self.clear_log_btn)
+        
+        layout.addLayout(top)
+
         layout.addWidget(self.log)
 
         return group
@@ -463,9 +508,14 @@ class GUI(QWidget):
         self.log.append(f"[{stamp}] {message}")
         QApplication.processEvents()
 
-    def set_status(self, label, text, state):
-        label.setText(text)
+    def set_status_led(self, led, label, state):
+        """Updates the status property of LEDs and Labels and repolishes them."""
+        led.setProperty("status", state)
         label.setProperty("status", state)
+        
+        # Force Qt to reload stylesheet
+        led.style().unpolish(led)
+        led.style().polish(led)
         label.style().unpolish(label)
         label.style().polish(label)
 
@@ -503,16 +553,11 @@ class GUI(QWidget):
     def connect_instruments(self):
         self.log_message("Connecting instruments...")
         keithley_ok, relay_ok = self.inst.connect_all(self.log_message)
-        self.set_status(
-            self.keithley_status,
-            "Keithley: connected" if keithley_ok else "Keithley: offline",
-            "ok" if keithley_ok else "bad",
-        )
-        self.set_status(
-            self.relay_status,
-            "Relay: connected" if relay_ok else "Relay: offline",
-            "ok" if relay_ok else "bad",
-        )
+        
+        self.set_status_led(self.keithley_led, self.keithley_lbl, "ok" if keithley_ok else "bad")
+        self.set_status_led(self.relay_led, self.relay_lbl, "ok" if relay_ok else "bad")
+
+        self.connect_btn.setText("Reconnect")
 
     def choose_output_dir(self):
         directory = QFileDialog.getExistingDirectory(
@@ -610,14 +655,18 @@ class GUI(QWidget):
 
     def toggle_theme(self):
         self.is_dark_mode = not self.is_dark_mode
-        
         self.apply_style()
         
+        # Change only the emoji symbol
         self.theme_btn.setText("☀️" if self.is_dark_mode else "🌙")
         
-        # 3. Update PyQtGraph colors manually (they ignore Qt stylesheets)
+        # Force status widgets to refresh their colors against the new stylesheet
+        for w in (self.keithley_led, self.keithley_lbl, self.relay_led, self.relay_lbl):
+            w.style().unpolish(w)
+            w.style().polish(w)
+        
+        # Update PyQtGraph colors manually
         bg_color = "#0b1120" if self.is_dark_mode else "#ffffff"
-        grid_color = "#1e293b" if self.is_dark_mode else "#e2e8f0"
         axis_pen = "#334155" if self.is_dark_mode else "#cbd5e1"
         text_pen = "#94a3b8" if self.is_dark_mode else "#64748b"
         
@@ -627,14 +676,10 @@ class GUI(QWidget):
         self.plot_manager.plot.getAxis("bottom").setTextPen(pg.mkPen(text_pen))
         self.plot_manager.plot.getAxis("left").setTextPen(pg.mkPen(text_pen))
         
-        # 4. Update the manual colors in the Footer Strip
+        # Update the manual colors in the Footer Strip
         footer_bg = "#1e293b" if self.is_dark_mode else "#ffffff"
         footer_border = "#334155" if self.is_dark_mode else "#cbd5e1"
-        text_color = "#f8fafc" if self.is_dark_mode else "#1f2933"
-        accent = "#38bdf8" if self.is_dark_mode else "#0284c7"
-        
         self.footer.setStyleSheet(f"background-color: {footer_bg}; border: 1px solid {footer_border}; border-radius: 8px;")
-        # (You can apply these dynamically via QSS classes instead of hardcoding if preferred)
     
     # --- Sweep Execution & Signal Slots ---
     def run_measurement(self):
@@ -826,3 +871,20 @@ class GUI(QWidget):
         if hasattr(self, "worker") and self.worker.isRunning():
             self.worker.request_abort()
             self.log_message("Abort requested")
+
+    def export_log_data(self):
+        log_text = self.log.toPlainText()
+        if not log_text.strip():
+            self.log_message("WARNING: Log is empty, nothing to export.")
+            return
+
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"System_Log_{timestamp}.txt"
+        path = os.path.join(self.output_dir, filename)
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(log_text)
+            self.log_message(f"OK: Log successfully exported to {path}")
+        except Exception as e:
+            self.log_message(f"ERROR: Could not export log file: {e}")
