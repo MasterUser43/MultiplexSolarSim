@@ -31,12 +31,13 @@ from instruments.keithley2460 import KEITHLEY_DEFAULT_COMPLIANCE_A
 
 from gui.custom_widgets import NoWheelSpinBox, NoWheelDoubleSpinBox, NoWheelComboBox
 from gui.plot_manager import PlotManager
-from gui.style import STYLE_SHEET
+from gui.style import get_theme
 
 
 class GUI(QWidget):
     def __init__(self):
         super().__init__()
+        self.is_dark_mode = False
 
         self.setWindowTitle("Multiplex Solar Simulator - IV Characterization")
         self.resize(1720, 1200)
@@ -55,7 +56,7 @@ class GUI(QWidget):
 
     def apply_style(self):
         self.setFont(QFont("Segoe UI", 10))
-        self.setStyleSheet(STYLE_SHEET)
+        self.setStyleSheet(get_theme(self.is_dark_mode))
 
     def build_ui(self):
         main = QVBoxLayout(self)
@@ -97,12 +98,36 @@ class GUI(QWidget):
         logs_layout.addWidget(self.build_log_panel())
         self.tabs.addTab(logs_tab, "4. SYSTEM LOGS")
 
-        # 3. Global Progress Bar (Hidden until sweep starts)
+        # 3. Global Footer Strip
+        self.footer = QFrame()
+        self.footer.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 8px;")
+        footer_layout = QHBoxLayout(self.footer)
+        footer_layout.setContentsMargins(16, 12, 16, 12)
+        
+        lbl_title = QLabel("SWEEP PROGRESS:")
+        lbl_title.setStyleSheet("color: #38bdf8; font-weight: bold; letter-spacing: 1px; border: none;")
+        footer_layout.addWidget(lbl_title)
+
         self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setTextVisible(True)
-        self.progress_bar.setFixedHeight(12)
-        main.addWidget(self.progress_bar)
+        self.progress_bar.setRange(0, 100)
+        footer_layout.addWidget(self.progress_bar, 1) # Stretch = 1
+
+        self.progress_pct = QLabel("0%")
+        self.progress_pct.setStyleSheet("font-weight: bold; color: #f8fafc; border: none;")
+        footer_layout.addWidget(self.progress_pct)
+        
+        # Vertical divider line
+        divider = QFrame()
+        divider.setFrameShape(QFrame.VLine)
+        divider.setStyleSheet("border-left: 1px solid #334155;")
+        footer_layout.addWidget(divider)
+
+        self.progress_txt = QLabel("Ready")
+        self.progress_txt.setStyleSheet("color: #94a3b8; border: none;")
+        footer_layout.addWidget(self.progress_txt)
+
+        self.footer.setVisible(False) # Hidden by default
+        main.addWidget(self.footer)
 
     def build_header(self):
         header = QFrame()
@@ -133,6 +158,12 @@ class GUI(QWidget):
         self.connect_btn.setObjectName("PrimaryButton")
         self.connect_btn.clicked.connect(self.connect_instruments)
         layout.addWidget(self.connect_btn)
+
+        # --- Theme Toggle Button ---
+        self.theme_btn = QPushButton("☀️") if self.is_dark_mode else QPushButton("🌙")
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        layout.addWidget(self.theme_btn)
+
         layout.addStretch(1)
 
         return header
@@ -446,12 +477,13 @@ class GUI(QWidget):
         self.save_btn.setEnabled((not running) and bool(self.results))
         self.browse_dir_btn.setEnabled(not running)
         
-        # Show progress bar only when running
-        self.progress_bar.setVisible(running)
+        # Show footer strip only when running
+        self.footer.setVisible(running)
         if running:
             self.progress_bar.setValue(0)
-            self.progress_bar.setFormat(" Initializing hardware... ")
-
+            self.progress_pct.setText("0%")
+            self.progress_txt.setText("Initializing hardware...")
+    
     def update_sweep_time_estimate(self):
         if not hasattr(self, "sweep_time_label"):
             return
@@ -576,6 +608,34 @@ class GUI(QWidget):
             
         return True
 
+    def toggle_theme(self):
+        self.is_dark_mode = not self.is_dark_mode
+        
+        self.apply_style()
+        
+        self.theme_btn.setText("☀️" if self.is_dark_mode else "🌙")
+        
+        # 3. Update PyQtGraph colors manually (they ignore Qt stylesheets)
+        bg_color = "#0b1120" if self.is_dark_mode else "#ffffff"
+        grid_color = "#1e293b" if self.is_dark_mode else "#e2e8f0"
+        axis_pen = "#334155" if self.is_dark_mode else "#cbd5e1"
+        text_pen = "#94a3b8" if self.is_dark_mode else "#64748b"
+        
+        self.plot_manager.plot.setBackground(bg_color)
+        self.plot_manager.plot.getAxis("bottom").setPen(pg.mkPen(axis_pen))
+        self.plot_manager.plot.getAxis("left").setPen(pg.mkPen(axis_pen))
+        self.plot_manager.plot.getAxis("bottom").setTextPen(pg.mkPen(text_pen))
+        self.plot_manager.plot.getAxis("left").setTextPen(pg.mkPen(text_pen))
+        
+        # 4. Update the manual colors in the Footer Strip
+        footer_bg = "#1e293b" if self.is_dark_mode else "#ffffff"
+        footer_border = "#334155" if self.is_dark_mode else "#cbd5e1"
+        text_color = "#f8fafc" if self.is_dark_mode else "#1f2933"
+        accent = "#38bdf8" if self.is_dark_mode else "#0284c7"
+        
+        self.footer.setStyleSheet(f"background-color: {footer_bg}; border: 1px solid {footer_border}; border-radius: 8px;")
+        # (You can apply these dynamically via QSS classes instead of hardcoding if preferred)
+    
     # --- Sweep Execution & Signal Slots ---
     def run_measurement(self):
         if not self.validate_inputs():
@@ -677,7 +737,8 @@ class GUI(QWidget):
 
     def _on_progress_update(self, percent, text):
         self.progress_bar.setValue(percent)
-        self.progress_bar.setFormat(f" {text}  (%p%) ")
+        self.progress_pct.setText(f"{percent}%")
+        self.progress_txt.setText(text)
 
     def add_result_row(self, pixel, area, metrics, status, loop_idx=None):
         r = self.table.rowCount()
