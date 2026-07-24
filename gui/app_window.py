@@ -80,8 +80,9 @@ class GUI(QWidget):
         # TAB 2: LIVE SWEEP
         live_tab = QWidget()
         live_layout = QHBoxLayout(live_tab)
+        live_layout.setSpacing(15)
         live_layout.addWidget(self.build_plot_panel(), 3)
-        # HUD to be added
+        live_layout.addWidget(self.build_live_hud(), 1)
         self.tabs.addTab(live_tab, "2. LIVE SWEEP")
 
         # TAB 3: RESULTS GALLERY
@@ -338,6 +339,42 @@ class GUI(QWidget):
 
         return group
 
+    def build_live_hud(self):
+        group = QGroupBox("Live Metrics")
+        group.setMinimumWidth(280)
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(16, 20, 16, 16)
+
+        self.hud_active_pixel = QLabel("Active Pixel: --")
+        self.hud_active_pixel.setStyleSheet("font-weight: 800; color: #1b5e8c; font-size: 16px;")
+        layout.addWidget(self.hud_active_pixel)
+        
+        def make_metric(label_text):
+            lbl_title = QLabel(label_text)
+            lbl_title.setStyleSheet("font-size: 11px; color: #64748b; margin-top: 12px; font-weight: bold; text-transform: uppercase;")
+            lbl_val = QLabel("--")
+            lbl_val.setStyleSheet("font-size: 28px; font-weight: 800; color: #1f2933; letter-spacing: -1px;")
+            layout.addWidget(lbl_title)
+            layout.addWidget(lbl_val)
+            return lbl_val
+
+        self.hud_voc = make_metric("Voc (V)")
+        self.hud_jsc = make_metric("Jsc (mA/cm²)")
+        self.hud_pce = make_metric("PCE (%)")
+        self.hud_ff  = make_metric("Fill Factor")
+        
+        layout.addStretch()
+        
+        # Big Abort button for the Live Tab
+        self.hud_abort = QPushButton("ABORT SWEEP")
+        self.hud_abort.setObjectName("DangerButton")
+        self.hud_abort.setMinimumHeight(50)
+        self.hud_abort.clicked.connect(self.abort_measurement)
+        self.hud_abort.setEnabled(False)
+        layout.addWidget(self.hud_abort)
+        
+        return group
+
     def build_results_panel(self):
         group = QGroupBox("Extracted Metrics")
         layout = QVBoxLayout(group)
@@ -405,6 +442,7 @@ class GUI(QWidget):
         self.start.setEnabled(not running)
         self.connect_btn.setEnabled(not running)
         self.abort.setEnabled(running)
+        self.hud_abort.setEnabled(running)
         self.save_btn.setEnabled((not running) and bool(self.results))
         self.browse_dir_btn.setEnabled(not running)
 
@@ -565,10 +603,16 @@ class GUI(QWidget):
         self.worker.pixel_result.connect(self._on_pixel_result)
         self.worker.pixel_faulted.connect(self._on_pixel_faulted)
         self.worker.finished_sweep.connect(self._on_sweep_finished)
+        self.tabs.setCurrentIndex(1)
         self.worker.start()
 
     def _on_pixel_started(self, pixel):
         self.current_pixel_label.setText(f"Measuring pixel: {pixel}")
+        self.hud_active_pixel.setText(f"Active Pixel: {pixel}")
+        
+        # Reset HUD numbers for the new pixel
+        for lbl in (self.hud_voc, self.hud_jsc, self.hud_pce, self.hud_ff):
+            lbl.setText("--")
 
     def _on_pixel_result(self, record):
         self.results.append(record)
@@ -581,6 +625,12 @@ class GUI(QWidget):
         )
         metrics = {k: record[k] for k in metric_keys}
         self.add_result_row(record["pixel"], record["area_cm2"], metrics, "OK", record["loop"])
+        
+        # Update the HUD with formatted metrics
+        self.hud_voc.setText(self.format_metric(metrics["Voc"], 3))
+        self.hud_jsc.setText(self.format_metric(metrics["Jsc"], 2))
+        self.hud_pce.setText(self.format_metric(metrics["PCE"], 2))
+        self.hud_ff.setText(self.format_metric(metrics["FF"], 2))
 
     def _on_pixel_faulted(self, pixel, area, fault, loop_number):
         self.add_result_row(pixel, area, None, fault, loop_number)
