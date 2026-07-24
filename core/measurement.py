@@ -55,6 +55,7 @@ class MeasurementWorker(QThread):
     pixel_result = pyqtSignal(dict)                     # successful pixel/loop -> full record
     pixel_faulted = pyqtSignal(str, float, str, int)    # pixel, area, fault, loop_number
     finished_sweep = pyqtSignal(bool, bool)             # (aborted, had_error)
+    progress_update = pyqtSignal(int, str)              # (percent_0_to_100, text)
 
     def __init__(self, keithley, relay, selected_pixels, sweep_params, parent=None):
         super().__init__(parent)
@@ -130,9 +131,18 @@ class MeasurementWorker(QThread):
                         f"({p['points']} points, {'reverse' if p['reverse'] else 'forward'})"
                     )
 
+                    total_points_in_pixel = len(V)
                     for point_idx, v in enumerate(V):
                         if self._abort:
                             break
+
+                        # --- Emit Progress ---
+                        percent = int(((point_idx + 1) / total_points_in_pixel) * 100)
+                        self.progress_update.emit(
+                            percent, 
+                            f"Pixel {pixel} - Point {point_idx + 1}/{total_points_in_pixel} - Loop {loop_idx + 1}/{p['loops']}"
+                        )
+
                         current, raw, keithley_v = keithley_read_current(
                             self.keithley, v, p["point_delay_s"]
                         )

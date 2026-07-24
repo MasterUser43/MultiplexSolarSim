@@ -445,6 +445,12 @@ class GUI(QWidget):
         self.hud_abort.setEnabled(running)
         self.save_btn.setEnabled((not running) and bool(self.results))
         self.browse_dir_btn.setEnabled(not running)
+        
+        # Show progress bar only when running
+        self.progress_bar.setVisible(running)
+        if running:
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat(" Initializing hardware... ")
 
     def update_sweep_time_estimate(self):
         if not hasattr(self, "sweep_time_label"):
@@ -553,10 +559,29 @@ class GUI(QWidget):
 
         self.pixel_grid.invalidate()
         self.updateGeometry()
+    
+    def validate_inputs(self):
+        if not self.inst.keithley or not self.inst.relay:
+            self.log_message("ERROR: Instruments are not connected.")
+            return False
+            
+        if self.v0.value() == self.v1.value():
+            self.log_message("ERROR: Start and Stop voltage cannot be the same.")
+            return False
+            
+        any_checked = any(cb.isChecked() for cb in self.checks)
+        if not any_checked:
+            self.log_message("ERROR: Please select at least one pixel.")
+            return False
+            
+        return True
 
     # --- Sweep Execution & Signal Slots ---
-
     def run_measurement(self):
+        if not self.validate_inputs():
+            self.tabs.setCurrentIndex(0)
+            return
+
         self.results = []
         self.table.setRowCount(0)
         self.plot_manager.clear_curves()
@@ -603,6 +628,7 @@ class GUI(QWidget):
         self.worker.pixel_result.connect(self._on_pixel_result)
         self.worker.pixel_faulted.connect(self._on_pixel_faulted)
         self.worker.finished_sweep.connect(self._on_sweep_finished)
+        self.worker.progress_update.connect(self._on_progress_update)
         self.tabs.setCurrentIndex(1)
         self.worker.start()
 
@@ -648,6 +674,10 @@ class GUI(QWidget):
 
         if self.auto_save.isChecked() and self.results:
             self.save_results(auto=True)
+
+    def _on_progress_update(self, percent, text):
+        self.progress_bar.setValue(percent)
+        self.progress_bar.setFormat(f" {text}  (%p%) ")
 
     def add_result_row(self, pixel, area, metrics, status, loop_idx=None):
         r = self.table.rowCount()
