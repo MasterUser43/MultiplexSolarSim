@@ -7,5 +7,3 @@ PyVISA>=1.13.0
 pyvisa-py>=0.7.0
 pyusb>=1.2.1
 libusb-package>=1.0.26.2
-pandas>=2.0.0
-openpyxl>=3.1.0
