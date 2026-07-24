@@ -8,14 +8,15 @@ Responsibilities:
   - Signal Handling: Receives measurement streams from the background thread
     to update plots, log messages, and output tables safely.
 """
+import html
 import os
 import time
 
 import numpy as np
 import pyqtgraph as pg
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QFont
+from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QFont, QTextCursor, QColor, QBrush
 from PyQt5.QtWidgets import *
 
 from core.instrument_manager import InstrumentManager
@@ -31,13 +32,15 @@ from instruments.keithley2460 import KEITHLEY_DEFAULT_COMPLIANCE_A
 
 from gui.custom_widgets import NoWheelSpinBox, NoWheelDoubleSpinBox, NoWheelComboBox
 from gui.plot_manager import PlotManager
-from gui.style import get_theme
+from gui.style import get_theme, get_theme_colors
 
 
 class GUI(QWidget):
     def __init__(self):
         super().__init__()
         self.is_dark_mode = False
+        self._shadow_widgets = []
+        self._role_colored_items = []  # [(QTableWidgetItem, role), ...] for theme refresh
 
         self.setWindowTitle("Multiplex Solar Simulator - IV Characterization")
         self.resize(1720, 1200)
@@ -100,12 +103,12 @@ class GUI(QWidget):
 
         # 3. Global Footer Strip
         self.footer = QFrame()
-        self.footer.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 8px;")
+        self.footer.setObjectName("FooterStrip")
         footer_layout = QHBoxLayout(self.footer)
         footer_layout.setContentsMargins(16, 12, 16, 12)
-        
+
         lbl_title = QLabel("SWEEP PROGRESS:")
-        lbl_title.setStyleSheet("color: #38bdf8; font-weight: bold; letter-spacing: 1px; border: none;")
+        lbl_title.setObjectName("AccentLabel")
         footer_layout.addWidget(lbl_title)
 
         self.progress_bar = QProgressBar()
@@ -113,20 +116,21 @@ class GUI(QWidget):
         footer_layout.addWidget(self.progress_bar, 1) # Stretch = 1
 
         self.progress_pct = QLabel("0%")
-        self.progress_pct.setStyleSheet("font-weight: bold; color: #f8fafc; border: none;")
+        self.progress_pct.setObjectName("MainLabel")
         footer_layout.addWidget(self.progress_pct)
-        
+
         # Vertical divider line
         divider = QFrame()
+        divider.setObjectName("VDivider")
         divider.setFrameShape(QFrame.VLine)
-        divider.setStyleSheet("border-left: 1px solid #334155;")
         footer_layout.addWidget(divider)
 
         self.progress_txt = QLabel("Ready")
-        self.progress_txt.setStyleSheet("color: #94a3b8; border: none;")
+        self.progress_txt.setObjectName("DimLabel")
         footer_layout.addWidget(self.progress_txt)
 
-        self.footer.setVisible(False) # Hidden by default
+        self.footer.setVisible(False)
+        self.add_panel_shadow(self.footer)
         main.addWidget(self.footer)
 
     def build_header(self):
@@ -137,10 +141,11 @@ class GUI(QWidget):
         layout = QHBoxLayout(header)
         layout.setContentsMargins(20, 8, 20, 8)
         layout.setSpacing(15)
+        layout.setAlignment(Qt.AlignVCenter)
 
         # Brand Title
         self.brand_title = QLabel("MULTIPLEX SIM")
-        self.brand_title.setStyleSheet("font-weight: 850; font-size: 14pt; color: #38bdf8; letter-spacing: 1px; border: none;")
+        self.brand_title.setObjectName("BrandTitle")
         layout.addWidget(self.brand_title)
         
         layout.addSpacing(10)
@@ -169,9 +174,9 @@ class GUI(QWidget):
         self.relay_lbl.setProperty("status", "idle")
         layout.addWidget(self.relay_lbl)
 
-        layout.addSpacing(10)
+        layout.addSpacing(15)
 
-        # Connection Button starts as "Connect Instruments"
+        # Compact Connection Button
         self.connect_btn = QPushButton("Connect Instruments")
         self.connect_btn.setMinimumHeight(32)
         self.connect_btn.clicked.connect(self.connect_instruments)
@@ -181,7 +186,7 @@ class GUI(QWidget):
 
         # Right Side Inputs (Sample ID & Browse)
         self.sample_lbl = QLabel("Sample ID:")
-        self.sample_lbl.setStyleSheet("font-weight: bold; font-size: 11px; color: #94a3b8; border: none;")
+        self.sample_lbl.setObjectName("DimLabel")
         layout.addWidget(self.sample_lbl)
 
         self.file = QLineEdit("Sample_Batch_01")
@@ -206,198 +211,208 @@ class GUI(QWidget):
         return header
 
     def build_pixel_panel(self):
-        group = QGroupBox("Pixel Selection")
-        self.pixel_group = group
-        group.setMinimumHeight(200)
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(6, 11, 14, 6)
-        layout.setSpacing(4)
+        panel = QFrame()
+        panel.setObjectName("PanelContainer")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
 
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Array"))
+        # Header Row
+        header_row = QHBoxLayout()
+        title_lbl = QLabel("PIXEL MATRIX")
+        title_lbl.setObjectName("PanelTitle")
+        header_row.addWidget(title_lbl)
+        
+        header_row.addStretch(1)
+        
         self.pixel_mode = NoWheelComboBox()
-        self.pixel_mode.setFixedHeight(32)
-        self.pixel_mode.addItems(["6 pixels", "12 pixels"])
+        self.pixel_mode.setFixedWidth(120)
+        self.pixel_mode.addItems(["6 Pixels", "12 Pixels"])
         self.pixel_mode.currentIndexChanged.connect(self.build_pixels)
-        row.addWidget(self.pixel_mode, 1)
-        layout.addLayout(row)
+        header_row.addWidget(self.pixel_mode)
+        layout.addLayout(header_row)
 
+        # Divider line
+        divider = QFrame()
+        divider.setObjectName("Divider")
+        divider.setFrameShape(QFrame.HLine)
+        layout.addWidget(divider)
+
+        # Grid Area
         self.pixel_grid = QGridLayout()
-        self.pixel_grid.setHorizontalSpacing(10)
-        self.pixel_grid.setVerticalSpacing(4)
+        self.pixel_grid.setSpacing(10)
+        self.pixel_grid.setAlignment(Qt.AlignTop)
 
-        # Left pair
-        self.pixel_grid.setColumnMinimumWidth(0, 52)
-        self.pixel_grid.setColumnMinimumWidth(1, 150)
+        grid_widget = QWidget()
+        grid_widget.setStyleSheet("background: transparent; border: none;")
+        grid_widget.setLayout(self.pixel_grid)
 
-        # Middle live-measurement label
-        self.pixel_grid.setColumnMinimumWidth(2, 165)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background: transparent; border: none;")
+        scroll.setWidget(grid_widget)
+        layout.addWidget(scroll)
 
-        # Right pair
-        self.pixel_grid.setColumnMinimumWidth(3, 52)
-        self.pixel_grid.setColumnMinimumWidth(4, 150)
-
-        self.pixel_grid.setColumnStretch(1, 1)
-        self.pixel_grid.setColumnStretch(4, 1)
-
-        layout.addLayout(self.pixel_grid)
-
-        # Live measurement status label
-        self.current_pixel_label = QLabel("Measuring pixel: --")
-        self.current_pixel_label.setAlignment(Qt.AlignCenter)
-        self.current_pixel_label.setStyleSheet("""
-            color: #52606d;
-            font-style: italic;
-            font-size: 13px;
-            padding-bottom: 2px;
-        """)
+        # Track the viewport so the grid can reflow its column count as the
+        # panel resizes [Need to be modified]
+        self._pixel_scroll_viewport = scroll.viewport()
+        self._pixel_scroll_viewport.installEventFilter(self)
+        self._pixel_card_min_width = 160
+        self._pixel_grid_cols = 3
 
         self.checks = []
         self.areas = []
         self.build_pixels()
 
-        scroll = QScrollArea()
-        self.pixel_scroll = scroll
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Keep reference so status updater doesn't crash
+        self.current_pixel_label = QLabel()
+        self.current_pixel_label.setVisible(False)
 
-        scroll.setWidget(group)
-        return scroll
+        self.add_panel_shadow(panel)
+        return panel
 
     def build_sweep_panel(self):
-        group = QGroupBox("Sweep Setup")
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(14, 24, 14, 16)
-        layout.setSpacing(14)
+        panel = QFrame()
+        panel.setObjectName("PanelContainer")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(0)
 
-        form = QGridLayout()
-        form.setHorizontalSpacing(16)
-        form.setVerticalSpacing(18)
-        form.setContentsMargins(0, 8, 0, 8)
-        form.setRowMinimumHeight(0, 48)
-        form.setRowMinimumHeight(1, 48)
-        form.setRowMinimumHeight(2, 48)
-        form.setRowMinimumHeight(3, 48)
-        form.setColumnMinimumWidth(0, 140)
-        form.setColumnMinimumWidth(1, 205)
-        form.setColumnMinimumWidth(2, 170)
-        form.setColumnMinimumWidth(3, 205)
-        form.setColumnStretch(1, 1)
-        form.setColumnStretch(3, 1)
+        # Header Title
+        title_lbl = QLabel("SWEEP SETUP")
+        title_lbl.setObjectName("PanelTitle")
+        title_lbl.setStyleSheet("padding-bottom: 8px;")
+        layout.addWidget(title_lbl)
 
-        for i in range(4):
-            form.setRowStretch(i, 0)
+        # Divider line under header
+        divider = QFrame()
+        divider.setObjectName("Divider")
+        divider.setFrameShape(QFrame.HLine)
+        layout.addWidget(divider)
 
-        def add_field(row, col, label_text, widget):
-            label = QLabel(label_text)
-            label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            label.setFixedHeight(44)
-
-            widget.setFixedHeight(44)
-
-            form.addWidget(label, row, col)
-            form.addWidget(widget, row, col + 1)
-
+        # Inputs
         self.v0 = NoWheelDoubleSpinBox()
-        self.v0.setMinimumWidth(205)
-        self.v0.setMinimumHeight(44)
         self.v0.setRange(-5, 5)
-        self.v0.setDecimals(3)
+        self.v0.setDecimals(2)
         self.v0.setValue(-0.2)
 
         self.v1 = NoWheelDoubleSpinBox()
-        self.v1.setMinimumWidth(205)
-        self.v1.setMinimumHeight(44)
         self.v1.setRange(-5, 5)
-        self.v1.setDecimals(3)
+        self.v1.setDecimals(2)
         self.v1.setValue(1.3)
 
         self.points = NoWheelSpinBox()
-        self.points.setMinimumWidth(205)
-        self.points.setMinimumHeight(44)
         self.points.setRange(2, 2000)
         self.points.setValue(100)
 
-        self.loops = NoWheelSpinBox()
-        self.loops.setMinimumWidth(205)
-        self.loops.setMinimumHeight(44)
-        self.loops.setRange(1, 20)
-        self.loops.setValue(1)
-
-        self.pin = NoWheelDoubleSpinBox()
-        self.pin.setMinimumWidth(205)
-        self.pin.setMinimumHeight(44)
-        self.pin.setRange(0.001, 5000)
-        self.pin.setDecimals(3)
-        self.pin.setValue(100.0)
-
-        self.compliance_ma = NoWheelDoubleSpinBox()
-        self.compliance_ma.setMinimumWidth(205)
-        self.compliance_ma.setMinimumHeight(44)
-        self.compliance_ma.setRange(0.001, 1000)
-        self.compliance_ma.setDecimals(3)
-        self.compliance_ma.setValue(KEITHLEY_DEFAULT_COMPLIANCE_A * 1000)
-
-        self.point_delay = NoWheelDoubleSpinBox()
-        self.point_delay.setMinimumWidth(205)
-        self.point_delay.setMinimumHeight(44)
-        self.point_delay.setRange(0.001, 10)
-        self.point_delay.setDecimals(3)
-        self.point_delay.setValue(0.010)
-
         self.dir = NoWheelComboBox()
-        self.dir.setMinimumWidth(205)
-        self.dir.setMinimumHeight(44)
         self.dir.addItems(["Forward", "Reverse"])
         self.dir.setCurrentText("Reverse")
 
-        add_field(0, 0, "From (V)", self.v0)
-        add_field(0, 2, "To (V)", self.v1)
-        add_field(1, 0, "Direction", self.dir)
-        add_field(1, 2, "Points", self.points)
-        add_field(2, 0, "Loops", self.loops)
-        add_field(2, 2, "Irradiance (mW/cm^2)", self.pin)
-        add_field(3, 0, "Compliance (mA)", self.compliance_ma)
-        add_field(3, 2, "Point Delay (s)", self.point_delay)
-        layout.addLayout(form)
+        self.loops = NoWheelSpinBox()
+        self.loops.setRange(1, 20)
+        self.loops.setValue(1)
 
+        self.point_delay = NoWheelDoubleSpinBox()
+        self.point_delay.setRange(0.001, 10)
+        self.point_delay.setDecimals(2)
+        self.point_delay.setValue(0.01)
+
+        self.compliance_ma = NoWheelDoubleSpinBox()
+        self.compliance_ma.setRange(0.001, 1000)
+        self.compliance_ma.setDecimals(0)
+        self.compliance_ma.setValue(KEITHLEY_DEFAULT_COMPLIANCE_A * 1000)
+
+        self.pin = NoWheelDoubleSpinBox()
+        self.pin.setRange(0.001, 5000)
+        self.pin.setDecimals(0)
+        self.pin.setValue(100.0)
+
+        # Helper to construct flat rows with fine bottom borders
+        def make_row(label_text, widget):
+            row = QFrame()
+            row.setObjectName("FormRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 8, 0, 8)
+            
+            lbl = QLabel(label_text)
+            lbl.setObjectName("DimLabel")
+
+            row_layout.addWidget(lbl)
+            row_layout.addStretch(1)
+            row_layout.addWidget(widget)
+            return row
+
+        layout.addWidget(make_row("Start Voltage (V)", self.v0))
+        layout.addWidget(make_row("Stop Voltage (V)", self.v1))
+        layout.addWidget(make_row("Step Count", self.points))
+        layout.addWidget(make_row("Direction", self.dir))
+        layout.addWidget(make_row("Loops", self.loops))
+        layout.addWidget(make_row("Point Delay (s)", self.point_delay))
+        layout.addWidget(make_row("Compliance (mA)", self.compliance_ma))
+        layout.addWidget(make_row("Irradiance (mW/cm²)", self.pin))
+
+        # Sweep duration label
         self.sweep_time_label = QLabel()
-        self.sweep_time_label.setAlignment(Qt.AlignRight)
-        self.sweep_time_label.setContentsMargins(0, 8, 0, 6)
+        self.sweep_time_label.setObjectName("DimLabel")
+        self.sweep_time_label.setStyleSheet("font-size: 11px; margin-top: 10px;")
         layout.addWidget(self.sweep_time_label)
         self.points.valueChanged.connect(self.update_sweep_time_estimate)
         self.point_delay.valueChanged.connect(self.update_sweep_time_estimate)
         self.update_sweep_time_estimate()
 
-        self.auto_save = QCheckBox("Auto-save TXT after sweep")
-        self.auto_save.setChecked(True)
-        layout.addWidget(self.auto_save)
+        layout.addStretch(1)
 
-        buttons = QHBoxLayout()
-        self.start = QPushButton("Start Sweep")
+        # Main action button
+        self.start = QPushButton("INITIALIZE RUN")
         self.start.setObjectName("PrimaryButton")
-        self.abort = QPushButton("Abort")
-        self.abort.setObjectName("DangerButton")
-        self.save_btn = QPushButton("Export TXT")
-        self.abort.setEnabled(False)
-        self.save_btn.setEnabled(False)
-
+        self.start.setMinimumHeight(44)
         self.start.clicked.connect(self.run_measurement)
-        self.abort.clicked.connect(self.abort_measurement)
-        self.save_btn.clicked.connect(lambda: self.save_results(auto=False))
+        layout.addWidget(self.start)
 
-        buttons.addWidget(self.start)
-        buttons.addWidget(self.abort)
-        buttons.addWidget(self.save_btn)
-        layout.addLayout(buttons)
+        # Keep unreferenced hidden buttons so current methods don't crash
+        self.abort = QPushButton()
+        self.abort.setVisible(False)
+        self.save_btn = QPushButton()
+        self.save_btn.setVisible(False)
+        self.auto_save = QCheckBox()
+        self.auto_save.setChecked(True)
+        self.auto_save.setVisible(False)
 
-        return group
+        self.add_panel_shadow(panel)
+        return panel
+
+    def add_panel_shadow(self, widget):
+        """Aesthetic choice that adds a shadow for more eye juicing"""
+        effect = QGraphicsDropShadowEffect(widget)
+        effect.setBlurRadius(20)
+        effect.setXOffset(0)
+        effect.setYOffset(4)
+        effect.setColor(QColor(0, 0, 0, 90 if self.is_dark_mode else 25))
+        widget.setGraphicsEffect(effect)
+        self._shadow_widgets.append(widget)
+
+    def build_panel_header(self, layout, title_text):
+        """Adds a PanelTitle label + Divider line to a layout, matching the
+        '.panel h2' look used across every panel in the HTML mock."""
+        title_lbl = QLabel(title_text.upper())
+        title_lbl.setObjectName("PanelTitle")
+        layout.addWidget(title_lbl)
+
+        divider = QFrame()
+        divider.setObjectName("Divider")
+        divider.setFrameShape(QFrame.HLine)
+        layout.addWidget(divider)
 
     def build_plot_panel(self):
-        group = QGroupBox("IV Curves")
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(12, 18, 12, 12)
+        panel = QFrame()
+        panel.setObjectName("PanelContainer")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        self.build_panel_header(layout, "IV Curves")
 
         self.plot_manager = PlotManager(
             range_dialog_callback=lambda: self.plot_manager.open_range_dialog(self, self.log_message)
@@ -405,34 +420,82 @@ class GUI(QWidget):
         self.plot = self.plot_manager.widget
         layout.addWidget(self.plot)
 
-        return group
+        # Sync initial plot colors w/ the active theme.
+        colors = get_theme_colors(self.is_dark_mode)
+        self.plot.setBackground(colors["bg_panel"])
+        self.plot.getAxis("bottom").setPen(pg.mkPen(colors["border"]))
+        self.plot.getAxis("left").setPen(pg.mkPen(colors["border"]))
+        self.plot.getAxis("bottom").setTextPen(pg.mkPen(colors["text_dim"]))
+        self.plot.getAxis("left").setTextPen(pg.mkPen(colors["text_dim"]))
+
+        self.add_panel_shadow(panel)
+        return panel
 
     def build_live_hud(self):
-        group = QGroupBox("Live Metrics")
-        group.setMinimumWidth(280)
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(16, 20, 16, 16)
+        panel = QFrame()
+        panel.setObjectName("PanelContainer")
+        panel.setMinimumWidth(280)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+        active_dot = QLabel("\u25cf")
+        active_dot.setObjectName("HudActivePixel")
+        header_row.addWidget(active_dot)
+
+        # Pulsing opacity animation :3
+        dot_opacity = QGraphicsOpacityEffect(active_dot)
+        active_dot.setGraphicsEffect(dot_opacity)
+        self._active_dot_pulse = QPropertyAnimation(dot_opacity, b"opacity", self)
+        self._active_dot_pulse.setDuration(1500)
+        self._active_dot_pulse.setStartValue(1.0)
+        self._active_dot_pulse.setKeyValueAt(0.5, 0.25)
+        self._active_dot_pulse.setEndValue(1.0)
+        self._active_dot_pulse.setEasingCurve(QEasingCurve.InOutSine)
+        self._active_dot_pulse.setLoopCount(-1)
+        self._active_dot_pulse.start()
 
         self.hud_active_pixel = QLabel("Active Pixel: --")
-        self.hud_active_pixel.setStyleSheet("font-weight: 800; color: #1b5e8c; font-size: 16px;")
-        layout.addWidget(self.hud_active_pixel)
-        
+        self.hud_active_pixel.setObjectName("PanelTitle")
+        header_row.addWidget(self.hud_active_pixel)
+        header_row.addStretch(1)
+        layout.addLayout(header_row)
+
+        divider = QFrame()
+        divider.setObjectName("Divider")
+        divider.setFrameShape(QFrame.HLine)
+        layout.addWidget(divider)
+
         def make_metric(label_text):
-            lbl_title = QLabel(label_text)
-            lbl_title.setStyleSheet("font-size: 11px; color: #64748b; margin-top: 12px; font-weight: bold; text-transform: uppercase;")
+            card = QFrame()
+            card.setObjectName("MetricCard")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(16, 12, 16, 12)
+            card_layout.setSpacing(4)
+            card_layout.setAlignment(Qt.AlignHCenter)
+
+            lbl_title = QLabel(label_text.upper())
+            lbl_title.setObjectName("MetricLabel")
+            lbl_title.setAlignment(Qt.AlignHCenter)
+
             lbl_val = QLabel("--")
-            lbl_val.setStyleSheet("font-size: 28px; font-weight: 800; color: #1f2933; letter-spacing: -1px;")
-            layout.addWidget(lbl_title)
-            layout.addWidget(lbl_val)
+            lbl_val.setObjectName("MetricValue")
+            lbl_val.setAlignment(Qt.AlignHCenter)
+
+            card_layout.addWidget(lbl_title)
+            card_layout.addWidget(lbl_val)
+            layout.addWidget(card)
             return lbl_val
 
         self.hud_voc = make_metric("Voc (V)")
-        self.hud_jsc = make_metric("Jsc (mA/cm²)")
+        self.hud_jsc = make_metric("Jsc (mA/cm\u00b2)")
         self.hud_pce = make_metric("PCE (%)")
         self.hud_ff  = make_metric("Fill Factor")
-        
+
         layout.addStretch()
-        
+
         # Big Abort button for the Live Tab
         self.hud_abort = QPushButton("ABORT SWEEP")
         self.hud_abort.setObjectName("DangerButton")
@@ -440,13 +503,18 @@ class GUI(QWidget):
         self.hud_abort.clicked.connect(self.abort_measurement)
         self.hud_abort.setEnabled(False)
         layout.addWidget(self.hud_abort)
-        
-        return group
+
+        self.add_panel_shadow(panel)
+        return panel
 
     def build_results_panel(self):
-        group = QGroupBox("Extracted Metrics")
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(12, 18, 12, 12)
+        panel = QFrame()
+        panel.setObjectName("PanelContainer")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        self.build_panel_header(layout, "Extracted Metrics")
 
         self.table = QTableWidget()
         self.table.setColumnCount(15)
@@ -466,21 +534,28 @@ class GUI(QWidget):
         self.table.setMinimumHeight(430)
         layout.addWidget(self.table)
 
-        return group
+        self.add_panel_shadow(panel)
+        return panel
 
     def build_log_panel(self):
-        group = QGroupBox("System Event Log")
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(16, 20, 16, 16)
+        panel = QFrame()
+        panel.setObjectName("PanelContainer")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
 
+        self.build_panel_header(layout, "System Event Log")
+
+        # 1. Instantiate the log
         self.log = QTextEdit()
         self.log.setReadOnly(True)
-        
-        # Top Control Bar inside Log Tab
+
+        # 2. Build the top control bar
         top = QHBoxLayout()
-        
-        top.addWidget(QLabel("Save Directory:"))
+
+        save_dir_lbl = QLabel("Save Directory:")
+        save_dir_lbl.setObjectName("DimLabel")
+        top.addWidget(save_dir_lbl)
         self.output_dir_field = QLineEdit(self.output_dir)
         self.output_dir_field.setReadOnly(True)
         top.addWidget(self.output_dir_field, 1)
@@ -497,15 +572,40 @@ class GUI(QWidget):
         
         layout.addLayout(top)
 
+        # 3. Add the log widget to the layout last so it sits below the control bar
         layout.addWidget(self.log)
 
-        return group
+        self.add_panel_shadow(panel)
+        return panel
 
     # --- UI Status & Logging Helpers ---
 
     def log_message(self, message):
         stamp = time.strftime("%H:%M:%S")
-        self.log.append(f"[{stamp}] {message}")
+        colors = get_theme_colors(self.is_dark_mode)
+
+        prefix, sep, rest = message.partition(": ")
+        prefix_key = prefix.strip().upper()
+
+        severity_colors = {
+            "OK": (colors["success"], colors["text_main"]),
+            "WARNING": (colors["warning"], colors["warning"]),
+            "ERROR": (colors["error"], colors["error"]),
+        }
+
+        ts_html = f'<span style="color:{colors["text_dim"]};">[{stamp}]</span>'
+
+        if sep and prefix_key in severity_colors:
+            prefix_color, text_color = severity_colors[prefix_key]
+            body_html = (
+                f'<span style="color:{prefix_color}; font-weight:bold;">{html.escape(prefix)}:</span> '
+                f'<span style="color:{text_color};">{html.escape(rest)}</span>'
+            )
+        else:
+            body_html = f'<span style="color:{colors["text_main"]};">{html.escape(message)}</span>'
+
+        self.log.append(f"{ts_html} {body_html}")
+        self.log.moveCursor(QTextCursor.End) # Auto-scroll
         QApplication.processEvents()
 
     def set_status_led(self, led, label, state):
@@ -518,6 +618,26 @@ class GUI(QWidget):
         led.style().polish(led)
         label.style().unpolish(label)
         label.style().polish(label)
+
+        self._refresh_led_glow(led)
+
+    def _refresh_led_glow(self, led):
+        """LED glowwer, similar to shadow function; simply visual"""
+        state = led.property("status")
+        colors = get_theme_colors(self.is_dark_mode)
+        glow_color = {"ok": colors["success"], "bad": colors["error"]}.get(state)
+
+        if glow_color:
+            effect = led.graphicsEffect()
+            if not isinstance(effect, QGraphicsDropShadowEffect):
+                effect = QGraphicsDropShadowEffect(led)
+                effect.setBlurRadius(14)
+                effect.setXOffset(0)
+                effect.setYOffset(0)
+                led.setGraphicsEffect(effect)
+            effect.setColor(QColor(glow_color))
+        else:
+            led.setGraphicsEffect(None)
 
     def set_running_state(self, running):
         self.start.setEnabled(not running)
@@ -546,6 +666,7 @@ class GUI(QWidget):
         )
 
     def refresh_startup_layout(self):
+        self.recompute_pixel_grid_columns()
         self.build_pixels()
         self.updateGeometry()
         self.layout().activate()
@@ -573,14 +694,38 @@ class GUI(QWidget):
 
     # --- Pixel Grid Configuration ---
 
+    def eventFilter(self, obj, event):
+        if (
+            event.type() == QEvent.Resize
+            and hasattr(self, "_pixel_scroll_viewport")
+            and obj is self._pixel_scroll_viewport
+        ):
+            self.recompute_pixel_grid_columns()
+        return super().eventFilter(obj, event)
+
+    def recompute_pixel_grid_columns(self):
+        """Recomputes how many pixel cards fit per row based on the current panel width"""
+        if not hasattr(self, "_pixel_scroll_viewport"):
+            return
+
+        spacing = self.pixel_grid.spacing()
+        card_w = self._pixel_card_min_width
+        available = self._pixel_scroll_viewport.width()
+        cols = max(1, (available + spacing) // (card_w + spacing))
+
+        if cols != self._pixel_grid_cols:
+            self._pixel_grid_cols = cols
+            self.build_pixels()
+
     def build_pixels(self):
         if not hasattr(self, "pixel_grid"):
             return
 
+        # Clear existing
         for i in reversed(range(self.pixel_grid.count())):
-            w = self.pixel_grid.itemAt(i).widget()
-            if w:
-                w.setParent(None)
+            item = self.pixel_grid.itemAt(i)
+            if item.widget():
+                item.widget().setParent(None)
 
         self.checks = []
         self.areas = []
@@ -589,50 +734,34 @@ class GUI(QWidget):
         labels = active_pixel_labels(pixel_mode)
         area_default = default_pixel_area(pixel_mode)
 
-        headers = [
-            ("Pixel", 0),
-            ("Area (cm^2)", 1),
-            ("Pixel", 3),
-            ("Area (cm^2)", 4),
-        ]
-
-        for text, col in headers:
-            header = QLabel(text)
-            header.setStyleSheet("font-weight: 700; color: #52606d;")
-            self.pixel_grid.addWidget(header, 0, col)
-
-        # Center live-measurement label
-        self.pixel_grid.addWidget(self.current_pixel_label, 0, 2)
-        self.pixel_grid.setRowMinimumHeight(0, 18)
-
-        visible_rows = (len(labels) + 1) // 2
-        for row in range(1, 7):
-            self.pixel_grid.setRowMinimumHeight(row, 32 if row <= visible_rows else 0)
-
-        if hasattr(self, "pixel_group"):
-            self.pixel_group.setMinimumHeight(200 if len(labels) <= 6 else 390)
-
+        cols = getattr(self, "_pixel_grid_cols", 3)
         for i, lab in enumerate(labels):
+            card = QFrame()
+            card.setObjectName("PixelCard")
+            card_layout = QHBoxLayout(card)
+            card_layout.setContentsMargins(12, 6, 12, 6)
+            card_layout.setSpacing(8)
+
             cb = QCheckBox(lab)
-            cb.setMinimumWidth(58)
-            cb.setFixedHeight(32)
+            cb.setStyleSheet("font-weight: bold; border: none; background: transparent;")
             cb.setChecked(True)
 
             area = NoWheelDoubleSpinBox()
-            area.setMinimumWidth(120)
-            area.setFixedHeight(32)
             area.setRange(0.0001, 100)
             area.setDecimals(4)
             area.setValue(area_default)
-            area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            area.setStyleSheet("border: none; background: transparent; padding: 0px;")
+
+            card_layout.addWidget(cb)
+            card_layout.addStretch(1)
+            card_layout.addWidget(area)
 
             self.checks.append(cb)
             self.areas.append(area)
 
-            row = (i // 2) + 1
-            col = 0 if (i % 2 == 0) else 3
-            self.pixel_grid.addWidget(cb, row, col)
-            self.pixel_grid.addWidget(area, row, col + 1)
+            row = i // cols
+            col = i % cols
+            self.pixel_grid.addWidget(card, row, col)
 
         self.pixel_grid.invalidate()
         self.updateGeometry()
@@ -665,21 +794,28 @@ class GUI(QWidget):
             w.style().unpolish(w)
             w.style().polish(w)
         
-        # Update PyQtGraph colors manually
-        bg_color = "#0b1120" if self.is_dark_mode else "#ffffff"
-        axis_pen = "#334155" if self.is_dark_mode else "#cbd5e1"
-        text_pen = "#94a3b8" if self.is_dark_mode else "#64748b"
-        
-        self.plot_manager.plot.setBackground(bg_color)
-        self.plot_manager.plot.getAxis("bottom").setPen(pg.mkPen(axis_pen))
-        self.plot_manager.plot.getAxis("left").setPen(pg.mkPen(axis_pen))
-        self.plot_manager.plot.getAxis("bottom").setTextPen(pg.mkPen(text_pen))
-        self.plot_manager.plot.getAxis("left").setTextPen(pg.mkPen(text_pen))
-        
-        # Update the manual colors in the Footer Strip
-        footer_bg = "#1e293b" if self.is_dark_mode else "#ffffff"
-        footer_border = "#334155" if self.is_dark_mode else "#cbd5e1"
-        self.footer.setStyleSheet(f"background-color: {footer_bg}; border: 1px solid {footer_border}; border-radius: 8px;")
+        # Update PyQtGraph colors manually (pyqtgraph isn't QSS-driven)
+        colors = get_theme_colors(self.is_dark_mode)
+        self.plot_manager.plot.setBackground(colors["bg_panel"])
+        self.plot_manager.plot.getAxis("bottom").setPen(pg.mkPen(colors["border"]))
+        self.plot_manager.plot.getAxis("left").setPen(pg.mkPen(colors["border"]))
+        self.plot_manager.plot.getAxis("bottom").setTextPen(pg.mkPen(colors["text_dim"]))
+        self.plot_manager.plot.getAxis("left").setTextPen(pg.mkPen(colors["text_dim"]))
+
+        # Refresh panel drop-shadows for the new theme
+        for widget in self._shadow_widgets:
+            effect = widget.graphicsEffect()
+            if effect is not None:
+                effect.setColor(QColor(0, 0, 0, 90 if self.is_dark_mode else 25))
+
+        # Recolor role-based table cells (fit-cells, status) rather than
+        # assuming warning/success/error stay identical across themes
+        for item, role in self._role_colored_items:
+            item.setForeground(QBrush(QColor(colors[role])))
+
+        # Refresh LED glow colors for the new theme
+        for led in (self.keithley_led, self.relay_led):
+            self._refresh_led_glow(led)
     
     # --- Sweep Execution & Signal Slots ---
     def run_measurement(self):
@@ -689,6 +825,7 @@ class GUI(QWidget):
 
         self.results = []
         self.table.setRowCount(0)
+        self._role_colored_items = []
         self.plot_manager.clear_curves()
         self.plot_manager.clear_legends()
         self.plot_manager.apply_default_range()
@@ -814,13 +951,35 @@ class GUI(QWidget):
 
         values.append(status)
 
+        # Column indices for the diode-model fit values (Rs fit / Rsh fit).
+        FIT_CELL_COLUMNS = {10, 11}
+
         for col, value in enumerate(values):
             item = QTableWidgetItem(value)
 
             if col > 0:
                 item.setTextAlignment(Qt.AlignCenter)
 
+            if col in FIT_CELL_COLUMNS and value != "--":
+                self._apply_role_color(item, "warning")
+                font = item.font()
+                font.setItalic(True)
+                font.setBold(True)
+                item.setFont(font)
+
+            if col == self.table.columnCount() - 1:
+                # Status column: green for OK, red for any fault string
+                self._apply_role_color(item, "success" if value == "OK" else "error")
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
+
             self.table.setItem(r, col, item)
+
+    def _apply_role_color(self, item, role):
+        """Colors a table item by semantic role (warning/success/error)"""
+        item.setForeground(QBrush(QColor(get_theme_colors(self.is_dark_mode)[role])))
+        self._role_colored_items.append((item, role))
 
     @staticmethod
     def format_metric(value, decimals):
@@ -888,3 +1047,4 @@ class GUI(QWidget):
             self.log_message(f"OK: Log successfully exported to {path}")
         except Exception as e:
             self.log_message(f"ERROR: Could not export log file: {e}")
+
