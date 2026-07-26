@@ -3,7 +3,6 @@ Builds the header, the mode tabs, the log panel, and the footer progress strip. 
 controllers to process respective button presses.
 """
 import os
-import sys
 
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt, QTimer
@@ -12,6 +11,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, Q
 
 from core.instrument_manager import InstrumentManager
 from core.exporter import ResultsExporter
+from core.paths import get_data_dir
 
 from controllers.main_controller import MainController
 from controllers.jv_controller import JVController
@@ -45,7 +45,7 @@ class MainWindow(QWidget):
         self.setMinimumSize(1024, 680)
         self.setObjectName("Root")
 
-        self.output_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        self.output_dir = get_data_dir()
         self.instrument_manager = InstrumentManager()
 
         self.apply_style()
