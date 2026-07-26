@@ -18,6 +18,7 @@ THEME_COLORS = {
         "border": "#cbd5e1",
         "row_hover": "rgba(0, 0, 0, 0.03)",
         "alt_row": "#eef2f6",
+        "card_bg": "#eef1f5",
     },
     True: {  # Dark mode
         "bg_base": "#0b1120",
@@ -34,6 +35,7 @@ THEME_COLORS = {
         "border": "#334155",
         "row_hover": "rgba(255, 255, 255, 0.03)",
         "alt_row": "#141c2e",
+        "card_bg": "#0f172a",
     },
 }
 
@@ -54,9 +56,9 @@ def _build_theme(c):
     QTabWidget::pane {{ border: none; }}
 
     QTabBar::tab {{
-        padding: 12px 24px;
+        padding: 12px 28px;
+        min-width: 120px;
         font-weight: bold;
-        letter-spacing: 1px;
         background: {c['bg_panel']};
         color: {c['text_dim']};
         border-bottom: 3px solid transparent;
@@ -76,8 +78,9 @@ def _build_theme(c):
         border: 1px solid {c['border']};
         color: {c['text_main']};
         border-radius: 6px;
-        padding: 6px 10px;
-        min-height: 24px;
+        padding: 8px 12px;
+        min-height: 30px;
+        font-size: 15px;
     }}
     QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
         border: 1px solid {c['accent']};
@@ -140,6 +143,17 @@ def _build_theme(c):
         border: 1px solid {c['border']};
         gridline-color: {c['border']};
     }}
+    /* Table wrapped in a rounded frame */
+    QFrame#TableWrap {{
+        border-radius: 8px;
+        border: 1px solid {c['border']};
+        background-color: {c['bg_panel']};
+    }}
+    QTableWidget#ResultsTable {{
+        border: none;
+        border-radius: 0px;
+        background-color: transparent;
+    }}
     QHeaderView::section {{
         font-weight: bold;
         padding: 8px;
@@ -149,7 +163,7 @@ def _build_theme(c):
         border-bottom: 2px solid {c['border']};
     }}
     QTableView::item {{
-        padding: 5px;
+        padding: 2px 5px;
         border-bottom: 1px solid {c['border']};
     }}
     QTableView::item:selected {{
@@ -165,7 +179,7 @@ def _build_theme(c):
         color: {c['text_main']};
         border: 1px solid {c['border']};
     }}
-    // Transparency required for QLabels
+    /* Keep bare QLabels transparent... */
     QLabel {{ background-color: transparent; border: none; }}
 
     /* --- Text Roles --- */
@@ -178,7 +192,12 @@ def _build_theme(c):
     QLabel#PanelTitle {{
         color: {c['accent']};
         font-weight: 800;
-        font-size: 11px;
+        letter-spacing: 1px;
+    }}
+    QLabel#PanelTitleLarge {{
+        color: {c['accent']};
+        font-weight: 800;
+        font-size: 20px;
         letter-spacing: 1px;
     }}
     QLabel#AccentLabel {{
@@ -248,11 +267,11 @@ def _build_theme(c):
 
     /* --- Pixel Cards --- */
     QFrame#PixelCard {{
-        border-radius: 6px;
+        border-radius: 8px;
         border: 1px solid {c['border']};
-        background-color: {c['bg_input']};
-        min-height: 38px;
-        max-height: 38px;
+        background-color: {c['card_bg']};
+        min-height: 56px;
+        max-height: 60px;
     }}
     QFrame#PixelCard:hover {{ border-color: {c['accent']}; }}
 
@@ -264,13 +283,13 @@ def _build_theme(c):
     }}
     QLabel#MetricLabel {{
         color: {c['accent']};
-        font-size: 11px;
+        font-size: 24px;
         font-weight: bold;
         letter-spacing: 1px;
     }}
     QLabel#MetricValue {{
         color: {c['text_main']};
-        font-size: 24px;
+        font-size: 40px;
         font-weight: 800;
         letter-spacing: -0.5px;
     }}
@@ -293,9 +312,9 @@ def _build_theme(c):
         border: none;
     }}
     QCheckBox::indicator {{
-        width: 16px;
-        height: 16px;
-        border-radius: 4px;
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
         border: 1px solid {c['border']};
         background-color: {c['bg_input']};
     }}

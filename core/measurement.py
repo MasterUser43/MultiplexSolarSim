@@ -82,7 +82,7 @@ class MeasurementWorker(QThread):
         if median > 0 and peak > max(5 * median, 50):
             self.log.emit(
                 f"WARNING: {pixel} current-density spike at {V[peak_idx]:.3f} V: "
-                f"{peak:.2f} mA/cm^2 vs median {median:.2f} mA/cm^2"
+                f"{peak:.2f} mA/cm\u00b2 vs median {median:.2f} mA/cm\u00b2"
             )
 
     def run(self):
@@ -205,7 +205,7 @@ class MeasurementWorker(QThread):
                     self.pixel_result.emit(record)
                     self.log.emit(
                         f"Pixel {pixel}: Voc={metrics['Voc']:.3f} V, "
-                        f"Jsc={metrics['Jsc']:.3f} mA/cm^2, "
+                        f"Jsc={metrics['Jsc']:.3f} mA/cm\u00b2, "
                         f"PCE={metrics['PCE']:.2f}%"
                     )
 
@@ -221,3 +221,4 @@ class MeasurementWorker(QThread):
             except Exception:
                 pass
             self.finished_sweep.emit(self._abort, measurement_error)
+
