@@ -7,13 +7,13 @@ import sys
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QApplication
 
-from gui.app_window import GUI
+from gui.main_window import MainWindow
 
 
 def main():
     app = QApplication(sys.argv)
     pg.setConfigOptions(antialias=True)
-    window = GUI()
+    window = MainWindow()
     window.show()
     sys.exit(app.exec_())
 
