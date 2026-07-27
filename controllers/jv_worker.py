@@ -107,8 +107,7 @@ class MeasurementWorker(QThread):
                     self.log.emit(f"Measuring pixel {pixel} on relay channel {ch} ({relay_token})")
                     self.pixel_started.emit(pixel)
 
-                    # --- HARDWARE INTERLOCK: SAFE SWITCHING SEQUENCE ---
-                    # To prevent relay arcing and protect the solar cell:
+                    # --- HARDWARE SAFE SWITCHING SEQUENCE ---
                     # 1. Bring Keithley to 0V and turn output OFF.
                     # 2. Isolate all pixels to open-circuit.
                     # 3. Wait for mechanical contacts to physically settle (RELAY_SETTLE_S).
@@ -148,7 +147,6 @@ class MeasurementWorker(QThread):
                         )
                         V_keithley.append(keithley_v)
 
-                        # Print raw responses for debugging first and intermediate points
 
                         if point_idx == 0:
                             self.log.emit(f"First raw Keithley current response for {pixel}: {raw}")

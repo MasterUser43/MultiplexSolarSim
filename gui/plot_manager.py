@@ -40,9 +40,8 @@ class PlotManager:
         self.plot.setBackground("#ffffff")
         self.plot.showGrid(x=True, y=True, alpha=0.22)
         self.plot.setLabel("bottom", "Voltage", units="V")
-        self.plot.setLabel("left", "Current Density", units="mA/cm^2")
+        self.plot.setLabel("left", "Current Density", units="mA/cm\u00b2")
         self.plot.setMinimumHeight(300)
-        self.plot.setMaximumHeight(340)
         self.plot.getAxis("bottom").setPen(pg.mkPen("#52606d"))
         self.plot.getAxis("left").setPen(pg.mkPen("#52606d"))
         self.plot.getAxis("bottom").setTextPen(pg.mkPen("#334e68"))
@@ -158,8 +157,8 @@ class PlotManager:
 
         form.addRow("Voltage min (V)", x_min)
         form.addRow("Voltage max (V)", x_max)
-        form.addRow("J min (mA/cm^2)", y_min)
-        form.addRow("J max (mA/cm^2)", y_max)
+        form.addRow("J min (mA/cm\u00b2)", y_min)
+        form.addRow("J max (mA/cm\u00b2)", y_max)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)

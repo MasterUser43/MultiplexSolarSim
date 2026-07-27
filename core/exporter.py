@@ -85,7 +85,7 @@ class ResultsExporter:
 
     def save_results(self, results, auto=False):
         if not results:
-            self.logger("No results to save")
+            self.logger("WARNING: No results to save")
             return
 
         timestamp = time.strftime("%H%M%S")
