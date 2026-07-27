@@ -64,6 +64,8 @@ class PlotManager:
         self.plot.clear()
 
     def pixel_color(self, channel):
+        if channel is None:
+            channel = 0
         return PIXEL_COLORS[channel % len(PIXEL_COLORS)]
 
     def loop_pen(self, loop_number, color="#243b53", width=2):

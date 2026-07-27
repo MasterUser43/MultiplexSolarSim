@@ -1,8 +1,8 @@
 # Deployment Guide
 
 One-time setup notes for running the Multiplex Solar Simulator on a new
-machine. Most of this is handled automatically by `install.bat` /
-`install.sh`.
+machine. Most of this is handled automatically the first time you run
+`Start_Windows.bat` / `Start_Linux.sh`.
 
 This document exists for the steps that need a human decision (IT permissions, 
 physical port identification) and as a reference if you skipped a prompt during 
@@ -13,21 +13,21 @@ install and need to do it later.
 ## Windows
 
 ### Installation
-```
-install.bat
-```
-Creates a local `.venv` folder inside the project directory and installs
-everything from `requirements.txt` into it. 
-Nothing is installed system-wide, and no administrator prompt should appear.
+Double-click **`Start_Windows.bat`**. The first run creates a local `.venv`
+folder inside the project directory and installs everything from
+`.app_internal\requirements.txt` into it. Nothing is installed system-wide,
+and no administrator prompt should appear. Every run after that skips
+straight to launching the app.
 
 If your machine doesn't already have Python 3.10+, install it from
 [python.org](https://www.python.org/downloads/) - during setup, check
 **"Add python.exe to PATH"**. 
 
-Typically, python is allowed through relevant IT-managed devices.
+Typically, python is allowed through relevant IT-managed devices confirmed
+from testing.
 
 ### "Windows protected your PC" / script execution warnings
-Downloaded `.bat` files may trigger a SmartScreen warning on first run:
+`Start_Windows.bat` may trigger a SmartScreen warning on first run:
 1. Click **"More info"**
 2. Click **"Run anyway"**
 
@@ -46,7 +46,7 @@ needed for troubleshooting (e.g. confirming the OS sees the board at all):
    linked in the main README.
 
 ### Identifying the Keithley 2460
-`install.bat` checks for `visa32.dll` (NI-VISA) and reports whether it
+`Start_Windows.bat` checks for `visa32.dll` (NI-VISA) and reports whether it
 found a system-wide install or will fall back to the bundled
 `pyvisa-py` + `libusb-package` backend - either is fine
 
@@ -60,7 +60,7 @@ which backend is used:
 ### Troubleshooting checklist
 - App won't start, nothing visible happens → check `logs\run_latest.log`
 - "Keithley not found" in the app's log panel, but Device Manager sees it
-  → try deleting `.venv` and re-running `install.bat` to reinstall
+  → try deleting `.venv` and re-running `Start_Windows.bat` to reinstall
   `pyvisa-py`/`pyusb`/`libusb-package` cleanly
 - Relay not found → confirm its COM port appears in Device Manager per
   above; if not, it's a cabling/driver issue, not a software one
@@ -71,21 +71,23 @@ which backend is used:
 
 ### Installation
 ```bash
-bash install.sh
+bash Start_Linux.sh
 ```
-Creates a local `.venv`, installs `requirements.txt`, and interactively
-checks three things needed for hardware access through one-time
-sudo fix or tells you to do it manually (documented below). Nothing is
-run with sudo w/o an explicit y/n prompt first.
+The first run creates a local `.venv`, installs `.app_internal/requirements.txt`,
+and checks three things needed for hardware access through a
+one-time sudo fix, or tells you to do it manually (documented below).
 
-If `install.sh` reports the `venv` module is missing (common on
+Nothing is run with sudo w/o an explicit y/n prompt first. Every run after
+that skips straight to launching the app.
+
+If `Start_Linux.sh` reports the `venv` module is missing (common on
 Debian/Ubuntu, where it's a separate package from `python3` itself):
 ```bash
 sudo apt install python3-venv
 ```
 
 ### One-time hardware permission setup
-These are the three checks `install.sh` runs automatically. Manual
+These are the three checks `Start_Linux.sh` runs automatically. Manual
 versions below, if you skipped a prompt or are setting up a machine where
 you don't have your own sudo access yet.
 
@@ -129,14 +131,6 @@ lsusb
 Look for a `05e6:2460` (Keithley) and a `2a19:0c03` (Numato) entry. If
 either is missing, that's a cabling/power problem, not a permissions or
 software one - check the physical connection before troubleshooting.
-
-### Running
-```bash
-bash run.sh
-```
-Runs in the foreground with a visible terminal. Every run is
-also logged to `logs/run_<timestamp>.log` for later review. Use
-`bash run.sh --no-log` to skip writing the log file.
 
 ### Troubleshooting checklist
 - "Relay not found" but `lsusb` shows it → almost always the `dialout`

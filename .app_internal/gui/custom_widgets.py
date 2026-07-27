@@ -3,7 +3,10 @@ Small, generic PyQt/pyqtgraph widget overrides with no business logic.
 """
 from PyQt5.QtCore import Qt, QRectF, QSize
 from PyQt5.QtGui import QTextDocument, QFont, QFontMetrics
-from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox, QComboBox, QHeaderView, QStyle, QStyleOptionHeader, QTabBar
+from PyQt5.QtWidgets import (
+    QSpinBox, QDoubleSpinBox, QComboBox, QHeaderView, QStyle, QStyleOptionHeader,
+    QTabBar, QTabWidget,
+)
 import pyqtgraph as pg
 
 
@@ -120,3 +123,27 @@ class SafeTabBar(QTabBar):
         needed_width = text_width + 64
         needed_height = max(size.height(), 46)
         return QSize(max(size.width(), needed_width), needed_height)
+
+
+class SizeAwareTabWidget(QTabWidget):
+    """A QTabWidget that reports the size hint of only the visible page"""
+
+    def sizeHint(self):
+        tab_bar_hint = self.tabBar().sizeHint()
+        current = self.currentWidget()
+        page_hint = current.sizeHint() if current is not None else super().sizeHint()
+
+        frame = 2 * self.style().pixelMetric(QStyle.PM_DefaultFrameWidth)
+        width = max(page_hint.width(), tab_bar_hint.width()) + frame
+        height = page_hint.height() + tab_bar_hint.height() + frame
+        return QSize(width, height)
+
+    def minimumSizeHint(self):
+        tab_bar_hint = self.tabBar().sizeHint()
+        current = self.currentWidget()
+        page_hint = current.minimumSizeHint() if current is not None else super().minimumSizeHint()
+
+        frame = 2 * self.style().pixelMetric(QStyle.PM_DefaultFrameWidth)
+        width = max(page_hint.width(), tab_bar_hint.width()) + frame
+        height = page_hint.height() + tab_bar_hint.height() + frame
+        return QSize(width, height)

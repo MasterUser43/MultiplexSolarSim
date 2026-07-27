@@ -66,9 +66,16 @@ class JVController(QObject):
     # --- Sweep lifecycle ---
 
     def validate(self):
-        if not self.inst.keithley or not self.inst.relay:
+        if not self.inst.keithley:
             self.log("ERROR: instruments are not connected")
             return False
+
+        selected = self.config_panel.get_selected_pixels()
+        needs_relay = any(channel is not None for _pixel, channel, _area in selected)
+        if needs_relay and not self.inst.relay:
+            self.log("ERROR: instruments are not connected")
+            return False
+
         err = self.config_panel.validate()
         if err:
             self.log(err)

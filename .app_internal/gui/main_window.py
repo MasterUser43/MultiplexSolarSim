@@ -3,20 +3,20 @@ Builds the header, the mode tabs, the log panel, and the footer progress strip. 
 controllers to process respective button presses.
 """
 import os
-import sys
 
 import pyqtgraph as pg
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QEvent
 from PyQt5.QtGui import QFont, QColor
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QProgressBar, QTabWidget, QScrollArea
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QProgressBar, QScrollArea
 
 from core.instrument_manager import InstrumentManager
 from core.exporter import ResultsExporter
+from core.paths import get_data_dir
 
 from controllers.main_controller import MainController
 from controllers.jv_controller import JVController
 
-from gui.custom_widgets import SafeTabBar
+from gui.custom_widgets import SafeTabBar, SizeAwareTabWidget
 from gui.style import get_theme, get_theme_colors
 from gui.effects import make_panel_shadow, update_shadow_color, animate_tab_switch
 
@@ -42,17 +42,17 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("Multiplex Solar Simulator - IV Characterization")
         self.resize(1440, 900)
-        self.setMinimumSize(1024, 680)
+        self.setMinimumSize(680, 560)
         self.setObjectName("Root")
 
-        self.output_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        self.output_dir = get_data_dir()
         self.instrument_manager = InstrumentManager()
 
         self.apply_style()
         self._build_ui()
         self._wire_controllers()
 
-        QTimer.singleShot(0, self.jv_config_panel.refresh_layout)
+        QTimer.singleShot(0, self._refresh_pixel_grid_layout)
 
     def apply_style(self):
         self.setFont(QFont("Segoe UI", 10))
@@ -70,22 +70,25 @@ class MainWindow(QWidget):
         self.header_panel.theme_toggled.connect(self.toggle_theme)
         main.addWidget(self.header_panel)
 
-        self.tabs = QTabWidget()
+        self.tabs = SizeAwareTabWidget()
         self.tabs.setTabBar(SafeTabBar(self.tabs))
         self.tabs.tabBar().setElideMode(Qt.ElideNone)
         self.tabs.tabBar().setExpanding(False)
 
         # Small screens (1080p and below) fix: Scrolls instead of clipping buttons off the bottom of the window.
         # per instance size constraints is overceded.
-        scroll = QScrollArea()
+        self.scroll = scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(self.tabs)
         main.addWidget(scroll, 1)
 
+        scroll.viewport().installEventFilter(self)
+
         # TAB 1: CONFIG
         self.jv_config_panel = JVConfigPanel(self.is_dark_mode)
         self._register_theme_aware(self.jv_config_panel)
+        self.jv_config_panel.layout_changed.connect(self._on_config_layout_changed)
         self.tabs.addTab(self.jv_config_panel, "1. CONFIG")
 
         # TAB 2: SWEEP
@@ -191,6 +194,25 @@ class MainWindow(QWidget):
 
     def _on_tab_changed(self, index):
         animate_tab_switch(self.tabs, index, anim_owner=self)
+        self.tabs.updateGeometry()
+        self._refresh_pixel_grid_layout()
+
+    def eventFilter(self, obj, event):
+        if obj is self.scroll.viewport() and event.type() == QEvent.Resize:
+            self._refresh_pixel_grid_layout()
+        return super().eventFilter(obj, event)
+
+    def _refresh_pixel_grid_layout(self):
+        viewport_width = self.scroll.viewport().width()
+        if viewport_width > 0:
+            self.jv_config_panel.set_available_content_width(viewport_width)
+
+    def _on_config_layout_changed(self):
+        # The pixel grid rebuilt itself after a debounce delay, so 
+        # re-measure the tab widget/scroll area.
+        self.jv_config_panel.updateGeometry()
+        self.tabs.updateGeometry()
+        self.scroll.updateGeometry()
 
     def toggle_theme(self):
         self.is_dark_mode = not self.is_dark_mode

@@ -1,4 +1,4 @@
-# Multiplex Solar Simulator - IV Characterization
+# Multiplex Solar Simulator Beta V1.0
 
 **[Overview](README.md)** | **[Setup & Deployment Guide](DEPLOYMENT.md)** | **[Troubleshooting](DEPLOYMENT.md#troubleshooting-checklist)**
 ___
@@ -12,19 +12,41 @@ Python/PyQt5 GUI for automated multi-pixel solar cell IV characterization. Integ
 
 ---
 
-## Installation
+## Installation & Running
 
-The Multiplex Solar Simulator features a **Zero-Config** installation process. It is designed to run in IT-managed lab environments where administrative privileges are restricted.
+There is only **one file** you need to click w.r.t. operating system.
 
-### Windows (Primary)
-1. Ensure Python 3.10+ is installed.
-2. Double-click **`install.bat`**. This creates a local virtual environment and sets up portable drivers inside the project folder.
-3. Run the application with **`run.bat`**.
+### Windows
+Double-click **`Start_Windows.bat`**. 
+- **First launch:** a terminal window opens and installs everything into a local, self-contained environment. Depending on internet connection and hardware specs, this should take ~5 minutes at worst.
+- **Sequential launches:** the double-click launches the app directly, a splash screen pops up for slower hardware.
 
 ### Linux
-1. Run `bash install.sh` in your terminal. 
-2. Follow the interactive prompts to grant USB and Serial permissions (one-time setup).
-3. Run the application with `bash run.sh`.
+Run:
+```bash
+bash Start_Linux.sh
+```
+- **First launch:** Installs the environment and walks you through the one-time USB/serial permission prompts (each needs `sudo` once).
+- **Sequential launches:** launches directly.
+
+Nothing is installed system-wide and is contained within a local `.venv`.
+
+---
+
+## What's in this folder
+
+```
+MultiplexSolarSim/
+├── Start_Windows.bat     <- Double-click this on Windows
+├── Start_Linux.sh        <- Run this on Linux
+├── README.md
+├── DEPLOYMENT.md
+└── .app_internal/        <- Application source code
+```
+
+`.app_internal/` is hidden on purpose s.t. the application's internals may remain clean/untouched for the end-user. The launcher scripts are the only supported entry point.
+
+When you launch the app, a splash screen appears immediately while the heavier numerical libraries finish loading in the background.
 
 ---
 

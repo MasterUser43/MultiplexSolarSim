@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QTextEdit,
 )
 
+from core.paths import get_logs_dir
 from gui.effects import make_panel_shadow, update_shadow_color
 from gui.style import get_theme_colors
 
@@ -132,7 +133,7 @@ class LogPanel(QWidget):
 
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         filename = f"System_Log_{timestamp}.txt"
-        path = os.path.join(self.output_dir, filename)
+        path = os.path.join(get_logs_dir(), filename)
 
         try:
             with open(path, "w", encoding="utf-8") as f:

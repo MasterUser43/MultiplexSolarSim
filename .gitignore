@@ -32,6 +32,10 @@ numatocdc-v1_5/
 *.txt
 *.log
 
+# Top-level output folders created at runtime
+/data/
+/logs/
+
 # Exceptions: We WANT to keep these files even if they match patterns above
 !requirements.txt
 !README.md
