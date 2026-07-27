@@ -12,6 +12,7 @@ from controllers.jv_worker import (
     PIXEL_TO_RELAY_CHANNEL,
     active_pixel_labels,
     default_pixel_area,
+    pixel_uses_relay,
 )
 from instruments.keithley2460 import KEITHLEY_DEFAULT_COMPLIANCE_A
 from gui.custom_widgets import NoWheelSpinBox, NoWheelDoubleSpinBox, NoWheelComboBox
@@ -156,7 +157,7 @@ class JVConfigPanel(QWidget):
 
         self.pixel_mode = NoWheelComboBox()
         self.pixel_mode.setMinimumWidth(110)
-        self.pixel_mode.addItems(["6 Pixels", "12 Pixels"])
+        self.pixel_mode.addItems(["6 Pixels", "12 Pixels", "Custom"])
         self.pixel_mode.currentIndexChanged.connect(self._build_pixels)
         header_row.addWidget(self.pixel_mode)
         layout.addLayout(header_row)
@@ -248,7 +249,10 @@ class JVConfigPanel(QWidget):
             cb.setProperty("pixel_label", lab)
 
             letter_lbl = QLabel(lab)
-            letter_lbl.setStyleSheet("font-weight: bold; font-size: 20px; border: none; background: transparent;")
+            label_font_size = 20 if len(lab) == 1 else 14
+            letter_lbl.setStyleSheet(
+                f"font-weight: bold; font-size: {label_font_size}px; border: none; background: transparent;"
+            )
 
             area = NoWheelDoubleSpinBox()
             area.setRange(0.0001, 100)
@@ -308,11 +312,13 @@ class JVConfigPanel(QWidget):
         }
 
     def get_selected_pixels(self):
+        use_relay = pixel_uses_relay(self.pixel_mode.currentText())
         selected = []
         for i, checkbox in enumerate(self.checks):
             if checkbox.isChecked():
                 pixel = checkbox.property("pixel_label")
-                selected.append((pixel, PIXEL_TO_RELAY_CHANNEL[pixel], self.areas[i].value()))
+                channel = PIXEL_TO_RELAY_CHANNEL[pixel] if use_relay else None
+                selected.append((pixel, channel, self.areas[i].value()))
         return selected
 
     def set_running(self, running):

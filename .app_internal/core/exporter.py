@@ -53,7 +53,7 @@ class ResultsExporter:
         path = self.build_results_table_path(timestamp)
         rows = sorted(
             results,
-            key=lambda row: (int(row.get("loop", 1)), int(row.get("channel", 0))),
+            key=lambda row: (int(row.get("loop", 1)), int(row.get("channel") or 0)),
         )
 
         with open(path, "w") as f:

@@ -34,17 +34,32 @@ PIXEL_TO_RELAY_CHANNEL = {label: i for i, label in enumerate(PIXEL_LABELS)}
 
 DEFAULT_AREA_6_PIXEL_CM2 = 0.0396
 DEFAULT_AREA_12_PIXEL_CM2 = 0.108
+DEFAULT_CUSTOM_AREA_CM2 = 0.0396
+
+# "Custom" is a single, directly-wired pixel (no relay board)
+CUSTOM_PIXEL_MODE = "Custom"
+CUSTOM_PIXEL_LABEL = "Custom"
 
 
 def active_pixel_labels(pixel_mode_text):
+    if pixel_mode_text == CUSTOM_PIXEL_MODE:
+        return [CUSTOM_PIXEL_LABEL]
     count = 6 if pixel_mode_text.startswith("6") else 12
     return PIXEL_LABELS[:count]
 
 
 def default_pixel_area(pixel_mode_text):
+    if pixel_mode_text == CUSTOM_PIXEL_MODE:
+        return DEFAULT_CUSTOM_AREA_CM2
     if pixel_mode_text.startswith("6"):
         return DEFAULT_AREA_6_PIXEL_CM2
     return DEFAULT_AREA_12_PIXEL_CM2
+
+
+def pixel_uses_relay(pixel_mode_text):
+    """Custom mode is wired straight to the Keithley, bypassing the relay
+    board entirely"""
+    return pixel_mode_text != CUSTOM_PIXEL_MODE
 
 
 class MeasurementWorker(QThread):
@@ -103,8 +118,8 @@ class MeasurementWorker(QThread):
                     if self._abort:
                         break
 
-                    relay_token = numato_relay_token(ch)
-                    self.log.emit(f"Measuring pixel {pixel} on relay channel {ch} ({relay_token})")
+                    use_relay = ch is not None
+
                     self.pixel_started.emit(pixel)
 
                     # --- HARDWARE SAFE SWITCHING SEQUENCE ---
@@ -114,10 +129,17 @@ class MeasurementWorker(QThread):
                     # 4. Connect target pixel, wait again, and only then enable Keithley output.
 
                     keithley_output_safe(self.keithley)
-                    all_pixels_disconnect(self.relay)
-                    time.sleep(RELAY_SETTLE_S)
-                    connect_pixel(self.relay, ch)
-                    time.sleep(RELAY_SETTLE_S)
+
+                    if use_relay:
+                        relay_token = numato_relay_token(ch)
+                        self.log.emit(f"Measuring pixel {pixel} on relay channel {ch} ({relay_token})")
+                        all_pixels_disconnect(self.relay)
+                        time.sleep(RELAY_SETTLE_S)
+                        connect_pixel(self.relay, ch)
+                        time.sleep(RELAY_SETTLE_S)
+                    else:
+                        self.log.emit(f"Measuring {pixel} direct-connected pixel; relay board bypassed")
+
                     keithley_output_enable(self.keithley, logger=self.log.emit)
 
                     # --- ACTIVE VOLTAGE SWEEP LOOP ---
@@ -166,8 +188,9 @@ class MeasurementWorker(QThread):
                     # Immediately kill output and isolate the relay contacts
 
                     keithley_output_safe(self.keithley)
-                    numato_command(self.relay, f"relay off {numato_relay_token(ch)}")
-                    time.sleep(RELAY_SETTLE_S)
+                    if use_relay:
+                        numato_command(self.relay, f"relay off {numato_relay_token(ch)}")
+                        time.sleep(RELAY_SETTLE_S)
 
                     if self._abort:
                         break
@@ -215,7 +238,8 @@ class MeasurementWorker(QThread):
             # Ensures relays and Keithley default back to off, even on crash or abort
             try:
                 keithley_output_safe(self.keithley)
-                all_pixels_disconnect(self.relay)
+                if self.relay is not None:
+                    all_pixels_disconnect(self.relay)
             except Exception:
                 pass
             self.finished_sweep.emit(self._abort, measurement_error)
