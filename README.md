@@ -3,6 +3,14 @@
 **[Overview](README.md)** | **[Setup & Deployment Guide](DEPLOYMENT.md)** | **[Troubleshooting](DEPLOYMENT.md#troubleshooting-checklist)**
 ___
 
+<p align="center">
+  <a href="https://github.com/MasterUser43/MultiplexSolarSim/releases/latest">
+    <img src="https://img.shields.io/github/v/release/MasterUser43/MultiplexSolarSim?include_prereleases&label=Download%20Beta&logo=github&style=for-the-badge&color=blue" alt="Download">
+  </a>
+  <img src="https://img.shields.io/github/license/MasterUser43/MultiplexSolarSim?style=for-the-badge&color=orange" alt="License">
+</p>
+
+ 
 Python/PyQt5 GUI for automated multi-pixel solar cell IV characterization. Integrates a **Keithley 2460 SMU** and a **Numato 16-channel USB relay** for multiplexed testing.
 
 ## Hardware Requirements
