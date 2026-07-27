@@ -46,7 +46,7 @@ needed for troubleshooting (e.g. confirming the OS sees the board at all):
    linked in the main README.
 
 ### Identifying the Keithley 2460
-`install.bat` checks for `visa32.dll` (NI-VISA) and reports whether it
+`Start_Windows.bat` checks for `visa32.dll` (NI-VISA) and reports whether it
 found a system-wide install or will fall back to the bundled
 `pyvisa-py` + `libusb-package` backend - either is fine
 
@@ -60,7 +60,7 @@ which backend is used:
 ### Troubleshooting checklist
 - App won't start, nothing visible happens → check `logs\run_latest.log`
 - "Keithley not found" in the app's log panel, but Device Manager sees it
-  → try deleting `.venv` and re-running `install.bat` to reinstall
+  → try deleting `.venv` and re-running `Start_Windows.bat` to reinstall
   `pyvisa-py`/`pyusb`/`libusb-package` cleanly
 - Relay not found → confirm its COM port appears in Device Manager per
   above; if not, it's a cabling/driver issue, not a software one
