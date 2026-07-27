@@ -2,10 +2,10 @@
 JV "CONFIG" tab: sweep-parameter form on the left, pixel matrix on the
 right. Owns and validates its own inputs.
 """
-from PyQt5.QtCore import Qt, QEvent, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout, QGridLayout, QLabel,
-    QCheckBox, QPushButton, QSizePolicy,
+    QCheckBox, QPushButton, QSizePolicy, QLayout,
 )
 
 from controllers.jv_worker import (
@@ -21,6 +21,7 @@ from gui.style import get_theme_colors
 
 class JVConfigPanel(QWidget):
     run_requested = pyqtSignal()
+    layout_changed = pyqtSignal()
 
     def __init__(self, is_dark_mode=False, parent=None):
         super().__init__(parent)
@@ -36,9 +37,11 @@ class JVConfigPanel(QWidget):
         self._pixel_reflow_timer.setSingleShot(True)
         self._pixel_reflow_timer.timeout.connect(self._build_pixels)
 
-        layout = QHBoxLayout(self)
+        self._top_layout = layout = QHBoxLayout(self)
         layout.setSpacing(15)
-        layout.addWidget(self._build_sweep_panel(), 1)
+        layout.setSizeConstraint(QLayout.SetNoConstraint)
+        self._sweep_panel = self._build_sweep_panel()
+        layout.addWidget(self._sweep_panel, 1)
         layout.addWidget(self._build_pixel_panel(), 2)
 
     # --- Sweep panel ---
@@ -147,12 +150,12 @@ class JVConfigPanel(QWidget):
         header_row = QHBoxLayout()
         title_lbl = QLabel("PIXEL MATRIX \u2014 Area (cm\u00b2)")
         title_lbl.setObjectName("PanelTitle")
-        header_row.addWidget(title_lbl)
-
-        header_row.addStretch(1)
+        title_lbl.setWordWrap(True)
+        title_lbl.setMinimumWidth(0)
+        header_row.addWidget(title_lbl, 1)
 
         self.pixel_mode = NoWheelComboBox()
-        self.pixel_mode.setFixedWidth(150)
+        self.pixel_mode.setMinimumWidth(110)
         self.pixel_mode.addItems(["6 Pixels", "12 Pixels"])
         self.pixel_mode.currentIndexChanged.connect(self._build_pixels)
         header_row.addWidget(self.pixel_mode)
@@ -174,28 +177,34 @@ class JVConfigPanel(QWidget):
         layout.addWidget(self.pixel_grid_widget)
         layout.addStretch(1)
 
-        # Track so the grid can reflow its column count as the panel resizes
-        self.pixel_grid_widget.installEventFilter(self)
-
         self._build_pixels()
 
         self._add_shadow(panel)
         return panel
 
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Resize and obj is self.pixel_grid_widget:
-            self._recompute_pixel_grid_columns()
-        return super().eventFilter(obj, event)
+    def set_available_content_width(self, available_width):
+        """Recompute the pixel-grid column count from a supplied
+        width (e.g. the scroll area's viewport width) rather than this
+        panel's own current width."""
 
-    def _recompute_pixel_grid_columns(self):
+        margins = self._top_layout.contentsMargins()
+        sweep_min_width = self._sweep_panel.minimumSizeHint().width()
+        content_width = (
+            available_width
+            - margins.left() - margins.right()
+            - self._top_layout.spacing()
+            - sweep_min_width
+            - 18 * 2  # pixel panel's own content margins
+        )
+        content_width = max(0, content_width)
+
         spacing = self.pixel_grid.spacing()
         card_w = self._pixel_card_min_width
-        available = self.pixel_grid_widget.width()
-        cols = max(1, (available + spacing) // (card_w + spacing))
+        cols = max(1, int((content_width + spacing) // (card_w + spacing)))
 
         if cols != self._pixel_grid_cols:
             self._pixel_grid_cols = cols
-            self._pixel_reflow_timer.start(120)
+            self._pixel_reflow_timer.start(60)
 
     def _build_pixels(self):
         for i in reversed(range(self.pixel_grid.count())):
@@ -263,6 +272,7 @@ class JVConfigPanel(QWidget):
 
         self.pixel_grid.invalidate()
         self.updateGeometry()
+        self.layout_changed.emit()
 
     def _add_shadow(self, widget):
         effect = make_panel_shadow(widget, self.is_dark_mode)
@@ -270,8 +280,9 @@ class JVConfigPanel(QWidget):
 
     # --- Public API for the controller ---
 
-    def refresh_layout(self):
-        self._recompute_pixel_grid_columns()
+    def refresh_layout(self, available_width=None):
+        if available_width is not None:
+            self.set_available_content_width(available_width)
         self._build_pixels()
         self.updateGeometry()
 
