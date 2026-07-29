@@ -11,8 +11,9 @@ Default test:
     - Turn selected relay OFF and pause for DMM checks
     - Cleanup: Keithley output OFF and all relays OFF
 
-Run from the Code folder:
-    .\venv\Scripts\python.exe .\test_keithley_relay_path.py
+Run from .app_internal:
+
+    pytest tests/test_keithley_relay_path.py -v
 
 Suggested DMM checks relative to Keithley LO / shared bottom electrode:
     Relay ON:

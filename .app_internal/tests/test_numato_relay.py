@@ -8,11 +8,9 @@ Default behavior:
     - Hold each relay on for 1 second, then turn it off
     - Repeat the full sequence 2 times
 
-Run from the MultiplexSolarSim parent folder:
-    .\Code\venv\Scripts\python.exe .\test_numato_relay.py
+Run from .app_internal:
 
-Run from the Code folder:
-    .\venv\Scripts\python.exe ..\test_numato_relay.py
+    pytest tests/test_numato_relay.py -v
 """
 
 import argparse
