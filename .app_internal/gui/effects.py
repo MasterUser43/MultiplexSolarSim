@@ -2,9 +2,9 @@
 Small, generic Qt visual-craft helpers w/o business-logic dependency.
 Any panel can call these.
 """
-from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QAbstractAnimation
-from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QGraphicsDropShadowEffect, QGraphicsOpacityEffect
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QAbstractAnimation
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 
 
 def make_panel_shadow(widget, is_dark_mode=False):

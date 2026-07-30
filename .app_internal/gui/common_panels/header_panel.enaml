@@ -1,0 +1,97 @@
+"""
+Top header bar: brand title, Keithley/Relay status LEDs, connect button,
+sample ID field, output-folder browse button, and the theme toggle.
+
+Pure layout + labels/buttons, no custom paint/text logic.
+"""
+from enaml.core.api import d_
+from enaml.layout.api import align, hbox, spacer
+from enaml.widgets.api import Container, Field, Label, PushButton
+
+from gui.effects import refresh_led_glow, set_status_led
+
+
+enamldef HeaderPanel(Container): header:
+    attr is_dark_mode: bool = False
+
+    # --- Public API  ---
+    event connect_clicked
+    event browse_clicked
+    event theme_toggled
+
+    func sample_name():
+        return sample_id_field.text.strip()
+
+    func set_connection_status(keithley_ok, relay_ok, colors):
+        set_status_led(keithley_led.proxy.widget, keithley_lbl.proxy.widget,
+                        "ok" if keithley_ok else "bad")
+        set_status_led(relay_led.proxy.widget, relay_lbl.proxy.widget,
+                        "ok" if relay_ok else "bad")
+        refresh_led_glow(keithley_led.proxy.widget, colors)
+        refresh_led_glow(relay_led.proxy.widget, colors)
+        connect_btn.text = "Reconnect"
+
+    func set_running(running):
+        connect_btn.enabled = not running
+        browse_dir_btn.enabled = not running
+
+    func apply_theme(colors, is_dark):
+        header.is_dark_mode = is_dark
+        theme_btn.text = "\u2600\ufe0f" if is_dark else "\U0001F319"
+        refresh_led_glow(keithley_led.proxy.widget, colors)
+        refresh_led_glow(relay_led.proxy.widget, colors)
+
+    padding = (20, 8, 20, 8)
+    constraints = [
+        hbox(
+            brand_title, keithley_led, keithley_lbl, relay_led, relay_lbl,
+            connect_btn, spacer, sample_lbl, sample_id_field, browse_dir_btn,
+            theme_btn, spacing=10,
+        ),
+        align("v_center", brand_title, keithley_led, keithley_lbl, relay_led,
+              relay_lbl, connect_btn, sample_lbl, sample_id_field,
+              browse_dir_btn, theme_btn),
+        sample_id_field.width >= 220,
+        sample_id_field.width <= 340,
+    ]
+
+    Label: brand_title:
+        text = "MULTIPLEX SIM"
+
+    Label: keithley_led:
+        name = "keithley_led"
+        text = "\u25cf"  # status dot; color/glow driven by set_connection_status
+
+    Label: keithley_lbl:
+        name = "keithley_lbl"
+        text = "KEITHLEY\n2460"
+
+    Label: relay_led:
+        name = "relay_led"
+        text = "\u25cf"
+
+    Label: relay_lbl:
+        name = "relay_lbl"
+        text = "RELAY\nMATRIX"
+
+    PushButton: connect_btn:
+        name = "connect_btn"
+        text = "Connect"
+        clicked :: header.connect_clicked = True
+
+    Label: sample_lbl:
+        text = "Sample ID:"
+
+    Field: sample_id_field:
+        name = "sample_id_field"
+        text = "Sample_Batch_01"
+
+    PushButton: browse_dir_btn:
+        name = "browse_dir_btn"
+        text = "Browse..."
+        clicked :: header.browse_clicked = True
+
+    PushButton: theme_btn:
+        name = "theme_btn"
+        text = "\u2600\ufe0f" if header.is_dark_mode else "\U0001F319"
+        clicked :: header.theme_toggled = True
