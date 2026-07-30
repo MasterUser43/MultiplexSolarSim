@@ -1,9 +1,9 @@
 """
 Small, generic PyQt/pyqtgraph widget overrides with no business logic.
 """
-from PyQt5.QtCore import Qt, QRectF, QSize
-from PyQt5.QtGui import QTextDocument, QFont, QFontMetrics
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, QRectF, QSize
+from PySide6.QtGui import QTextDocument, QFont, QFontMetrics
+from PySide6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QComboBox, QHeaderView, QStyle, QStyleOptionHeader,
     QTabBar, QTabWidget,
 )

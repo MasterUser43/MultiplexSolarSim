@@ -3,28 +3,43 @@ JV "SWEEP" tab: the live IV curve plot plus the live-metrics HUD sitting
 beside it. Owns a PlotManager instance. Exposes plain setter methods for
 the controller to push live data in as the sweep runs.
 """
+from atom.api import Bool, Callable, Event, List, Typed
+from enaml.core.declarative import d_
+from enaml.widgets.raw_widget import RawWidget
 import pyqtgraph as pg
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton
 
 from gui.plot_manager import PlotManager
 from gui.effects import make_panel_shadow, update_shadow_color
 from gui.style import get_theme_colors
 
 
-class JVPlotPanel(QWidget):
-    abort_requested = pyqtSignal()
-    export_png_requested = pyqtSignal()
+class JVPlotPanel(RawWidget):
+    __slots__ = ('__weakref__',)
 
-    def __init__(self, is_dark_mode=False, parent=None):
-        super().__init__(parent)
-        self.is_dark_mode = is_dark_mode
-        self._shadow_widgets = []
+    is_dark_mode = d_(Bool(False))
 
-        layout = QHBoxLayout(self)
+    abort_requested = d_(Event(), writable=False)
+    export_png_requested = d_(Event(), writable=False)
+
+    plot_manager = Typed(PlotManager)
+    _hud_active_pixel = Typed(QLabel)
+    _hud_voc = Typed(QLabel)
+    _hud_jsc = Typed(QLabel)
+    _hud_pce = Typed(QLabel)
+    _hud_ff = Typed(QLabel)
+    _hud_abort = Typed(QPushButton)
+    _shadow_widgets = List()
+    _log = Callable(lambda message: None)  # replaced via set_logger()
+
+    def create_widget(self, parent):
+        container = QWidget(parent)
+        layout = QHBoxLayout(container)
         layout.setSpacing(15)
         layout.addWidget(self._build_plot_panel(), 3)
         layout.addWidget(self._build_live_hud(), 1)
+        return container
 
     def _build_plot_panel(self):
         panel = QFrame()
@@ -35,10 +50,11 @@ class JVPlotPanel(QWidget):
         layout.setSpacing(10)
 
         self.plot_manager = PlotManager(
-            range_dialog_callback=lambda: self.plot_manager.open_range_dialog(self, self._log)
+            range_dialog_callback=lambda: self.plot_manager.open_range_dialog(
+                self.get_widget(), self._log
+            )
         )
-        self.plot = self.plot_manager.widget
-        layout.addWidget(self.plot, 1)
+        layout.addWidget(self.plot_manager.widget, 1)
 
         tools_row = QHBoxLayout()
         tools_row.setSpacing(8)
@@ -49,23 +65,24 @@ class JVPlotPanel(QWidget):
 
         set_range_btn = QPushButton("Set Range...")
         set_range_btn.clicked.connect(
-            lambda: self.plot_manager.open_range_dialog(self, self._log)
+            lambda: self.plot_manager.open_range_dialog(self.get_widget(), self._log)
         )
         tools_row.addWidget(set_range_btn)
 
-        self.export_png_btn = QPushButton("Export PNG")
-        self.export_png_btn.clicked.connect(self.export_png_requested.emit)
-        tools_row.addWidget(self.export_png_btn)
+        export_png_btn = QPushButton("Export PNG")
+        export_png_btn.clicked.connect(self._on_export_png_clicked)
+        tools_row.addWidget(export_png_btn)
 
         tools_row.addStretch(1)
         layout.addLayout(tools_row)
 
         colors = get_theme_colors(self.is_dark_mode)
-        self.plot.setBackground(colors["bg_panel"])
-        self.plot.getAxis("bottom").setPen(pg.mkPen(colors["border"]))
-        self.plot.getAxis("left").setPen(pg.mkPen(colors["border"]))
-        self.plot.getAxis("bottom").setTextPen(pg.mkPen(colors["text_dim"]))
-        self.plot.getAxis("left").setTextPen(pg.mkPen(colors["text_dim"]))
+        plot = self.plot_manager.widget
+        plot.setBackground(colors["bg_panel"])
+        plot.getAxis("bottom").setPen(pg.mkPen(colors["border"]))
+        plot.getAxis("left").setPen(pg.mkPen(colors["border"]))
+        plot.getAxis("bottom").setTextPen(pg.mkPen(colors["text_dim"]))
+        plot.getAxis("left").setTextPen(pg.mkPen(colors["text_dim"]))
 
         self._add_shadow(panel)
         return panel
@@ -87,9 +104,9 @@ class JVPlotPanel(QWidget):
         divider.setFrameShape(QFrame.HLine)
         layout.addWidget(divider)
 
-        self.hud_active_pixel = QLabel("Latest Pixel: --")
-        self.hud_active_pixel.setObjectName("HudActivePixel")
-        layout.addWidget(self.hud_active_pixel)
+        self._hud_active_pixel = QLabel("Latest Pixel: --")
+        self._hud_active_pixel.setObjectName("HudActivePixel")
+        layout.addWidget(self._hud_active_pixel)
 
         divider2 = QFrame()
         divider2.setObjectName("Divider")
@@ -119,31 +136,32 @@ class JVPlotPanel(QWidget):
             layout.addWidget(card)
             return lbl_val
 
-        self.hud_voc = make_metric("V<sub>OC</sub> (V)")
-        self.hud_jsc = make_metric("J<sub>SC</sub> (mA/cm\u00b2)")
-        self.hud_pce = make_metric("PCE (%)")
-        self.hud_ff = make_metric("FILL FACTOR")
+        self._hud_voc = make_metric("V<sub>OC</sub> (V)")
+        self._hud_jsc = make_metric("J<sub>SC</sub> (mA/cm\u00b2)")
+        self._hud_pce = make_metric("PCE (%)")
+        self._hud_ff = make_metric("FILL FACTOR")
 
         layout.addStretch()
 
-        self.hud_abort = QPushButton("ABORT SWEEP")
-        self.hud_abort.setObjectName("DangerButton")
-        self.hud_abort.setMinimumHeight(42)
-        self.hud_abort.clicked.connect(self.abort_requested.emit)
-        self.hud_abort.setEnabled(False)
-        layout.addWidget(self.hud_abort)
+        self._hud_abort = QPushButton("ABORT SWEEP")
+        self._hud_abort.setObjectName("DangerButton")
+        self._hud_abort.setMinimumHeight(42)
+        self._hud_abort.clicked.connect(self._on_abort_clicked)
+        self._hud_abort.setEnabled(False)
+        layout.addWidget(self._hud_abort)
 
         self._add_shadow(panel)
         return panel
 
     def _add_shadow(self, widget):
         effect = make_panel_shadow(widget, self.is_dark_mode)
-        self._shadow_widgets.append(effect)
+        self._shadow_widgets = self._shadow_widgets + [effect]
 
-    def _log(self, message):
-        """Fallback no-op logger for PlotManager's range-dialog error path
-        until the controller wires a real one in via set_logger()."""
-        pass
+    def _on_abort_clicked(self):
+        self.abort_requested = True
+
+    def _on_export_png_clicked(self):
+        self.export_png_requested = True
 
     # --- Public API for the controller ---
 
@@ -154,8 +172,8 @@ class JVPlotPanel(QWidget):
         self.plot_manager.clear_curves()
         self.plot_manager.clear_legends()
         self.plot_manager.apply_default_range()
-        self.hud_active_pixel.setText("Latest Pixel: --")
-        for lbl in (self.hud_voc, self.hud_jsc, self.hud_pce, self.hud_ff):
+        self._hud_active_pixel.setText("Latest Pixel: --")
+        for lbl in (self._hud_voc, self._hud_jsc, self._hud_pce, self._hud_ff):
             lbl.setText("--")
 
     def prepare_legends(self, selected_pixels, loop_count):
@@ -165,23 +183,24 @@ class JVPlotPanel(QWidget):
         self.plot_manager.plot_curve(V, J, channel, loop_number)
 
     def set_active_pixel(self, pixel):
-        self.hud_active_pixel.setText(f"Latest Pixel: {pixel}")
+        self._hud_active_pixel.setText(f"Latest Pixel: {pixel}")
 
     def set_hud_metrics(self, voc_text, jsc_text, pce_text, ff_text):
-        self.hud_voc.setText(voc_text)
-        self.hud_jsc.setText(jsc_text)
-        self.hud_pce.setText(pce_text)
-        self.hud_ff.setText(ff_text)
+        self._hud_voc.setText(voc_text)
+        self._hud_jsc.setText(jsc_text)
+        self._hud_pce.setText(pce_text)
+        self._hud_ff.setText(ff_text)
 
     def set_running(self, running):
-        self.hud_abort.setEnabled(running)
+        self._hud_abort.setEnabled(running)
 
     def apply_theme(self, colors, is_dark_mode):
         self.is_dark_mode = is_dark_mode
         for effect in self._shadow_widgets:
             update_shadow_color(effect, is_dark_mode)
-        self.plot_manager.plot.setBackground(colors["bg_panel"])
-        self.plot_manager.plot.getAxis("bottom").setPen(pg.mkPen(colors["border"]))
-        self.plot_manager.plot.getAxis("left").setPen(pg.mkPen(colors["border"]))
-        self.plot_manager.plot.getAxis("bottom").setTextPen(pg.mkPen(colors["text_dim"]))
-        self.plot_manager.plot.getAxis("left").setTextPen(pg.mkPen(colors["text_dim"]))
+        plot = self.plot_manager.widget
+        plot.setBackground(colors["bg_panel"])
+        plot.getAxis("bottom").setPen(pg.mkPen(colors["border"]))
+        plot.getAxis("left").setPen(pg.mkPen(colors["border"]))
+        plot.getAxis("bottom").setTextPen(pg.mkPen(colors["text_dim"]))
+        plot.getAxis("left").setTextPen(pg.mkPen(colors["text_dim"]))

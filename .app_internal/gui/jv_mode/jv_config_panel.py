@@ -2,8 +2,11 @@
 JV "CONFIG" tab: sweep-parameter form on the left, pixel matrix on the
 right. Owns and validates its own inputs.
 """
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtWidgets import (
+from atom.api import Bool, Event, List, Typed, Value
+from enaml.core.declarative import d_
+from enaml.widgets.raw_widget import RawWidget
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout, QGridLayout, QLabel,
     QCheckBox, QPushButton, QSizePolicy, QLayout,
 )
@@ -20,30 +23,54 @@ from gui.effects import make_panel_shadow, update_shadow_color
 from gui.style import get_theme_colors
 
 
-class JVConfigPanel(QWidget):
-    run_requested = pyqtSignal()
-    layout_changed = pyqtSignal()
+class JVConfigPanel(RawWidget):
+    __slots__ = ('__weakref__',)
 
-    def __init__(self, is_dark_mode=False, parent=None):
-        super().__init__(parent)
-        self.is_dark_mode = is_dark_mode
-        self._shadow_widgets = []
+    is_dark_mode = d_(Bool(False))
 
-        self.checks = []
-        self.areas = []
-        self._pixel_card_min_width = 230
-        self._pixel_grid_cols = 3
+    run_requested = d_(Event(), writable=False)
+    layout_changed = d_(Event(), writable=False)
 
-        self._pixel_reflow_timer = QTimer(self)
+    # Sweep-parameter inputs
+    _v0 = Typed(NoWheelDoubleSpinBox)
+    _v1 = Typed(NoWheelDoubleSpinBox)
+    _points = Typed(NoWheelSpinBox)
+    _dir = Typed(NoWheelComboBox)
+    _loops = Typed(NoWheelSpinBox)
+    _point_delay = Typed(NoWheelDoubleSpinBox)
+    _compliance_ma = Typed(NoWheelDoubleSpinBox)
+    _pin = Typed(NoWheelDoubleSpinBox)
+    _start_btn = Typed(QPushButton)
+
+    # Pixel matrix
+    _pixel_mode = Typed(NoWheelComboBox)
+    _pixel_grid = Typed(QGridLayout)
+    _pixel_grid_widget = Typed(QWidget)
+    _checks = List()   # [QCheckBox, ...], rebuilt wholesale by _build_pixels
+    _areas = List()    # [NoWheelDoubleSpinBox, ...], parallel to _checks
+
+    _top_layout = Typed(QHBoxLayout)
+    _sweep_panel = Typed(QFrame)
+    _shadow_widgets = List()
+    _pixel_reflow_timer = Typed(QTimer)
+    _pixel_card_min_width = Value(230)
+    _pixel_grid_cols = Value(3)
+
+    def create_widget(self, parent):
+        container = QWidget(parent)
+
+        self._pixel_reflow_timer = QTimer(container)
         self._pixel_reflow_timer.setSingleShot(True)
         self._pixel_reflow_timer.timeout.connect(self._build_pixels)
 
-        self._top_layout = layout = QHBoxLayout(self)
+        self._top_layout = layout = QHBoxLayout(container)
         layout.setSpacing(15)
         layout.setSizeConstraint(QLayout.SetNoConstraint)
         self._sweep_panel = self._build_sweep_panel()
         layout.addWidget(self._sweep_panel, 1)
         layout.addWidget(self._build_pixel_panel(), 2)
+
+        return container
 
     # --- Sweep panel ---
 
@@ -65,42 +92,42 @@ class JVConfigPanel(QWidget):
         divider.setFrameShape(QFrame.HLine)
         layout.addWidget(divider)
 
-        self.v0 = NoWheelDoubleSpinBox()
-        self.v0.setRange(-5, 5)
-        self.v0.setDecimals(2)
-        self.v0.setValue(-0.2)
+        self._v0 = NoWheelDoubleSpinBox()
+        self._v0.setRange(-5, 5)
+        self._v0.setDecimals(2)
+        self._v0.setValue(-0.2)
 
-        self.v1 = NoWheelDoubleSpinBox()
-        self.v1.setRange(-5, 5)
-        self.v1.setDecimals(2)
-        self.v1.setValue(1.3)
+        self._v1 = NoWheelDoubleSpinBox()
+        self._v1.setRange(-5, 5)
+        self._v1.setDecimals(2)
+        self._v1.setValue(1.3)
 
-        self.points = NoWheelSpinBox()
-        self.points.setRange(2, 2000)
-        self.points.setValue(100)
+        self._points = NoWheelSpinBox()
+        self._points.setRange(2, 2000)
+        self._points.setValue(100)
 
-        self.dir = NoWheelComboBox()
-        self.dir.addItems(["Forward", "Reverse"])
-        self.dir.setCurrentText("Reverse")
+        self._dir = NoWheelComboBox()
+        self._dir.addItems(["Forward", "Reverse"])
+        self._dir.setCurrentText("Reverse")
 
-        self.loops = NoWheelSpinBox()
-        self.loops.setRange(1, 20)
-        self.loops.setValue(1)
+        self._loops = NoWheelSpinBox()
+        self._loops.setRange(1, 20)
+        self._loops.setValue(1)
 
-        self.point_delay = NoWheelDoubleSpinBox()
-        self.point_delay.setRange(0.001, 10)
-        self.point_delay.setDecimals(2)
-        self.point_delay.setValue(0.01)
+        self._point_delay = NoWheelDoubleSpinBox()
+        self._point_delay.setRange(0.001, 10)
+        self._point_delay.setDecimals(2)
+        self._point_delay.setValue(0.01)
 
-        self.compliance_ma = NoWheelDoubleSpinBox()
-        self.compliance_ma.setRange(0.001, 1000)
-        self.compliance_ma.setDecimals(0)
-        self.compliance_ma.setValue(KEITHLEY_DEFAULT_COMPLIANCE_A * 1000)
+        self._compliance_ma = NoWheelDoubleSpinBox()
+        self._compliance_ma.setRange(0.001, 1000)
+        self._compliance_ma.setDecimals(0)
+        self._compliance_ma.setValue(KEITHLEY_DEFAULT_COMPLIANCE_A * 1000)
 
-        self.pin = NoWheelDoubleSpinBox()
-        self.pin.setRange(0.001, 5000)
-        self.pin.setDecimals(0)
-        self.pin.setValue(100.0)
+        self._pin = NoWheelDoubleSpinBox()
+        self._pin.setRange(0.001, 5000)
+        self._pin.setDecimals(0)
+        self._pin.setValue(100.0)
 
         def make_row(label_text, widget):
             row = QFrame()
@@ -118,25 +145,28 @@ class JVConfigPanel(QWidget):
             row_layout.addWidget(widget)
             return row
 
-        layout.addWidget(make_row("Start Voltage (V)", self.v0))
-        layout.addWidget(make_row("Stop Voltage (V)", self.v1))
-        layout.addWidget(make_row("Step Count", self.points))
-        layout.addWidget(make_row("Direction", self.dir))
-        layout.addWidget(make_row("Loops", self.loops))
-        layout.addWidget(make_row("Point Delay (s)", self.point_delay))
-        layout.addWidget(make_row("Compliance (mA)", self.compliance_ma))
-        layout.addWidget(make_row("Irradiance (mW/cm\u00b2)", self.pin))
+        layout.addWidget(make_row("Start Voltage (V)", self._v0))
+        layout.addWidget(make_row("Stop Voltage (V)", self._v1))
+        layout.addWidget(make_row("Step Count", self._points))
+        layout.addWidget(make_row("Direction", self._dir))
+        layout.addWidget(make_row("Loops", self._loops))
+        layout.addWidget(make_row("Point Delay (s)", self._point_delay))
+        layout.addWidget(make_row("Compliance (mA)", self._compliance_ma))
+        layout.addWidget(make_row("Irradiance (mW/cm\u00b2)", self._pin))
 
         layout.addStretch(1)
 
-        self.start = QPushButton("INITIALIZE RUN")
-        self.start.setObjectName("PrimaryButton")
-        self.start.setMinimumHeight(44)
-        self.start.clicked.connect(self.run_requested.emit)
-        layout.addWidget(self.start)
+        self._start_btn = QPushButton("INITIALIZE RUN")
+        self._start_btn.setObjectName("PrimaryButton")
+        self._start_btn.setMinimumHeight(44)
+        self._start_btn.clicked.connect(self._on_run_clicked)
+        layout.addWidget(self._start_btn)
 
         self._add_shadow(panel)
         return panel
+
+    def _on_run_clicked(self):
+        self.run_requested = True
 
     # --- Pixel panel ---
 
@@ -155,11 +185,11 @@ class JVConfigPanel(QWidget):
         title_lbl.setMinimumWidth(0)
         header_row.addWidget(title_lbl, 1)
 
-        self.pixel_mode = NoWheelComboBox()
-        self.pixel_mode.setMinimumWidth(110)
-        self.pixel_mode.addItems(["6 Pixels", "12 Pixels", "Custom"])
-        self.pixel_mode.currentIndexChanged.connect(self._build_pixels)
-        header_row.addWidget(self.pixel_mode)
+        self._pixel_mode = NoWheelComboBox()
+        self._pixel_mode.setMinimumWidth(110)
+        self._pixel_mode.addItems(["6 Pixels", "12 Pixels", "Custom"])
+        self._pixel_mode.currentIndexChanged.connect(self._build_pixels)
+        header_row.addWidget(self._pixel_mode)
         layout.addLayout(header_row)
 
         divider = QFrame()
@@ -167,15 +197,15 @@ class JVConfigPanel(QWidget):
         divider.setFrameShape(QFrame.HLine)
         layout.addWidget(divider)
 
-        self.pixel_grid = QGridLayout()
-        self.pixel_grid.setSpacing(10)
-        self.pixel_grid.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self._pixel_grid = QGridLayout()
+        self._pixel_grid.setSpacing(10)
+        self._pixel_grid.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
-        self.pixel_grid_widget = QWidget()
-        self.pixel_grid_widget.setStyleSheet("background: transparent; border: none;")
-        self.pixel_grid_widget.setLayout(self.pixel_grid)
-        self.pixel_grid_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        layout.addWidget(self.pixel_grid_widget)
+        self._pixel_grid_widget = QWidget()
+        self._pixel_grid_widget.setStyleSheet("background: transparent; border: none;")
+        self._pixel_grid_widget.setLayout(self._pixel_grid)
+        self._pixel_grid_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        layout.addWidget(self._pixel_grid_widget)
         layout.addStretch(1)
 
         self._build_pixels()
@@ -199,7 +229,7 @@ class JVConfigPanel(QWidget):
         )
         content_width = max(0, content_width)
 
-        spacing = self.pixel_grid.spacing()
+        spacing = self._pixel_grid.spacing()
         card_w = self._pixel_card_min_width
         cols = max(1, int((content_width + spacing) // (card_w + spacing)))
 
@@ -208,21 +238,23 @@ class JVConfigPanel(QWidget):
             self._pixel_reflow_timer.start(60)
 
     def _build_pixels(self):
-        for i in reversed(range(self.pixel_grid.count())):
-            item = self.pixel_grid.itemAt(i)
+        for i in reversed(range(self._pixel_grid.count())):
+            item = self._pixel_grid.itemAt(i)
             if item.widget():
                 item.widget().setParent(None)
 
-        self.checks = []
-        self.areas = []
+        self._checks = []
+        self._areas = []
 
-        pixel_mode = self.pixel_mode.currentText()
+        pixel_mode = self._pixel_mode.currentText()
         labels = active_pixel_labels(pixel_mode)
         area_default = default_pixel_area(pixel_mode)
 
         colors = get_theme_colors(self.is_dark_mode)
         cols = self._pixel_grid_cols
         card_width = self._pixel_card_min_width
+        checks = []
+        areas = []
         for i, lab in enumerate(labels):
             card = QFrame()
             card.setObjectName("PixelCard")
@@ -267,20 +299,25 @@ class JVConfigPanel(QWidget):
             card_layout.addStretch(1)
             card_layout.addWidget(area)
 
-            self.checks.append(cb)
-            self.areas.append(area)
+            checks.append(cb)
+            areas.append(area)
 
             row = i // cols
             col = i % cols
-            self.pixel_grid.addWidget(card, row, col)
+            self._pixel_grid.addWidget(card, row, col)
 
-        self.pixel_grid.invalidate()
-        self.updateGeometry()
-        self.layout_changed.emit()
+        self._checks = checks
+        self._areas = areas
+
+        self._pixel_grid.invalidate()
+        widget = self.get_widget()
+        if widget is not None:
+            widget.updateGeometry()
+        self.layout_changed = True
 
     def _add_shadow(self, widget):
         effect = make_panel_shadow(widget, self.is_dark_mode)
-        self._shadow_widgets.append(effect)
+        self._shadow_widgets = self._shadow_widgets + [effect]
 
     # --- Public API for the controller ---
 
@@ -288,41 +325,43 @@ class JVConfigPanel(QWidget):
         if available_width is not None:
             self.set_available_content_width(available_width)
         self._build_pixels()
-        self.updateGeometry()
+        widget = self.get_widget()
+        if widget is not None:
+            widget.updateGeometry()
 
     def validate(self):
         """Panel-local validation only (voltage range, pixel selection).
         Instrument-connection validation is the controller's job."""
-        if self.v0.value() == self.v1.value():
+        if self._v0.value() == self._v1.value():
             return "ERROR: Start and Stop voltage cannot be the same."
-        if not any(cb.isChecked() for cb in self.checks):
+        if not any(cb.isChecked() for cb in self._checks):
             return "ERROR: Please select at least one pixel."
         return None
 
     def get_sweep_params(self):
         return {
-            "v0": self.v0.value(),
-            "v1": self.v1.value(),
-            "reverse": self.dir.currentText() == "Reverse",
-            "pin": self.pin.value(),
-            "compliance_a": self.compliance_ma.value() / 1000,
-            "point_delay_s": self.point_delay.value(),
-            "loops": self.loops.value(),
-            "points": self.points.value(),
+            "v0": self._v0.value(),
+            "v1": self._v1.value(),
+            "reverse": self._dir.currentText() == "Reverse",
+            "pin": self._pin.value(),
+            "compliance_a": self._compliance_ma.value() / 1000,
+            "point_delay_s": self._point_delay.value(),
+            "loops": self._loops.value(),
+            "points": self._points.value(),
         }
 
     def get_selected_pixels(self):
-        use_relay = pixel_uses_relay(self.pixel_mode.currentText())
+        use_relay = pixel_uses_relay(self._pixel_mode.currentText())
         selected = []
-        for i, checkbox in enumerate(self.checks):
+        for i, checkbox in enumerate(self._checks):
             if checkbox.isChecked():
                 pixel = checkbox.property("pixel_label")
                 channel = PIXEL_TO_RELAY_CHANNEL[pixel] if use_relay else None
-                selected.append((pixel, channel, self.areas[i].value()))
+                selected.append((pixel, channel, self._areas[i].value()))
         return selected
 
     def set_running(self, running):
-        self.start.setEnabled(not running)
+        self._start_btn.setEnabled(not running)
 
     def apply_theme(self, colors, is_dark_mode):
         self.is_dark_mode = is_dark_mode

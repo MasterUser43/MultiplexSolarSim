@@ -6,8 +6,8 @@ right-click range dialog.
 This module only interacts with PyQt/pyqtgraph, only focusing on rendering
 curves.
 """
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
 import pyqtgraph as pg
 
 from gui.custom_widgets import NoWheelViewBox, NoWheelDoubleSpinBox
@@ -167,7 +167,7 @@ class PlotManager:
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
 
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             if x_max.value() <= x_min.value() or y_max.value() <= y_min.value():
                 log_callback("ERROR: plot range maximum must be greater than minimum")
                 return
