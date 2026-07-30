@@ -7,10 +7,11 @@ import os
 import time
 
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5.QtWidgets import QFileDialog
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtWidgets import QFileDialog
 
 from controllers.jv_worker import MeasurementWorker
+from core.sweep_state import SweepState
 from gui.formatting import format_metric
 
 _METRIC_KEYS = (
@@ -20,9 +21,9 @@ _METRIC_KEYS = (
 
 
 class JVController(QObject):
-    running_changed = pyqtSignal(bool)
-    progress_changed = pyqtSignal(int, str)
-    sweep_finished = pyqtSignal(bool, bool)
+    running_changed = Signal(bool)
+    progress_changed = Signal(int, str)
+    sweep_finished = Signal(bool, bool)
 
     def __init__(
         self,
@@ -52,6 +53,7 @@ class JVController(QObject):
 
         self.results = []
         self.worker = None
+        self.state = SweepState()  # Atom mirror of the signals below, for Enaml views
 
         self.plot_panel.set_logger(self.log)
         self.config_panel.run_requested.connect(self.run_measurement)
@@ -97,6 +99,8 @@ class JVController(QObject):
             return
 
         self.results = []
+        self.state.results = []
+        self.state.faults = []
         self.results_panel.clear()
         self.results_panel.set_export_enabled(False)
         self.plot_panel.reset_for_new_run()
@@ -109,7 +113,7 @@ class JVController(QObject):
         # To prevent connection conflicts and crashes, do not command or
         # query the instruments from this GUI thread while the sweep runs.
         self.worker = MeasurementWorker(self.inst.keithley, self.inst.relay, selected, sweep_params)
-        self.worker.log.connect(self.log)
+        self.worker.log.connect(self._on_log)
         self.worker.pixel_started.connect(self._on_pixel_started)
         self.worker.pixel_result.connect(self._on_pixel_result)
         self.worker.pixel_faulted.connect(self._on_pixel_faulted)
@@ -124,17 +128,24 @@ class JVController(QObject):
             self.log("Abort requested")
 
     def _set_running(self, running):
+        self.state.running = running
         self.config_panel.set_running(running)
         self.plot_panel.set_running(running)
         self.running_changed.emit(running)
 
     # --- Worker signal slots ---
 
+    def _on_log(self, message):
+        self.state.log_lines.append(message)
+        self.log(message)
+
     def _on_pixel_started(self, pixel):
+        self.state.active_pixel = pixel
         self.plot_panel.set_active_pixel(pixel)
 
     def _on_pixel_result(self, record):
         self.results.append(record)
+        self.state.results.append(record)
         V = np.asarray(record["voltage_v"], dtype=float)
         J = np.asarray(record["current_density_ma_cm2"], dtype=float)
         self.plot_panel.plot_curve(V, J, record["channel"], record["loop"])
@@ -151,9 +162,17 @@ class JVController(QObject):
         )
 
     def _on_pixel_faulted(self, pixel, area, fault, loop_number):
+        self.state.faults.append(
+            {"pixel": pixel, "area": area, "fault": fault, "loop": loop_number}
+        )
         self.results_panel.add_result_row(pixel, area, None, fault, loop_number)
 
     def _on_sweep_finished(self, aborted, had_error):
+        self.state.finished_aborted = aborted
+        self.state.finished_had_error = had_error
+        self.state.finish_count += 1
+        self.state.active_pixel = "--"
+
         self.plot_panel.set_active_pixel("--")
         self._set_running(False)
 
@@ -174,6 +193,8 @@ class JVController(QObject):
         self.sweep_finished.emit(aborted, had_error)
 
     def _on_progress_update(self, percent, text):
+        self.state.progress_percent = percent
+        self.state.progress_text = text
         self.progress_changed.emit(percent, text)
 
     # --- Output directory / exports ---

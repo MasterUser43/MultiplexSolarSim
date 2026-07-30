@@ -11,7 +11,7 @@ Thread Safety & Hardware Rules:
 import time
 
 import numpy as np
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from core.pv_math import full_iv_report, check_fault
 from instruments.keithley2460 import (
@@ -65,12 +65,12 @@ def pixel_uses_relay(pixel_mode_text):
 class MeasurementWorker(QThread):
     """Runs one full sweep (all loops x all selected pixels) off the GUI thread."""
 
-    log = pyqtSignal(str)
-    pixel_started = pyqtSignal(str)
-    pixel_result = pyqtSignal(dict)                     # successful pixel/loop -> full record
-    pixel_faulted = pyqtSignal(str, float, str, int)    # pixel, area, fault, loop_number
-    finished_sweep = pyqtSignal(bool, bool)             # (aborted, had_error)
-    progress_update = pyqtSignal(int, str)              # (percent_0_to_100, text)
+    log = Signal(str)
+    pixel_started = Signal(str)
+    pixel_result = Signal(dict)                     # successful pixel/loop -> full record
+    pixel_faulted = Signal(str, float, str, int)    # pixel, area, fault, loop_number
+    finished_sweep = Signal(bool, bool)             # (aborted, had_error)
+    progress_update = Signal(int, str)              # (percent_0_to_100, text)
 
     def __init__(self, keithley, relay, selected_pixels, sweep_params, parent=None):
         super().__init__(parent)
