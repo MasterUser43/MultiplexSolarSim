@@ -241,7 +241,9 @@ class JVConfigPanel(RawWidget):
         for i in reversed(range(self._pixel_grid.count())):
             item = self._pixel_grid.itemAt(i)
             if item.widget():
-                item.widget().setParent(None)
+                widget = item.widget()
+                self._pixel_grid.removeWidget(widget)
+                widget.deleteLater()                  
 
         self._checks = []
         self._areas = []
