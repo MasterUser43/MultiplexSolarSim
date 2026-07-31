@@ -21,9 +21,6 @@ _METRIC_KEYS = (
 
 
 class JVController(QObject):
-    running_changed = Signal(bool)
-    progress_changed = Signal(int, str)
-    sweep_finished = Signal(bool, bool)
 
     def __init__(
         self,
@@ -56,11 +53,11 @@ class JVController(QObject):
         self.state = SweepState()  # Atom mirror of the signals below, for Enaml views
 
         self.plot_panel.set_logger(self.log)
-        self.config_panel.run_requested.connect(self.run_measurement)
-        self.plot_panel.abort_requested.connect(self.abort_measurement)
-        self.plot_panel.export_png_requested.connect(self.export_plot_png)
-        self.results_panel.export_txt_requested.connect(lambda: self.save_results(auto=False))
-        self.results_panel.export_csv_requested.connect(self.export_results_csv)
+        self.config_panel.observe("run_requested", lambda change: self.run_measurement())
+        self.plot_panel.observe("abort_requested", lambda change: self.abort_measurement())
+        self.plot_panel.observe("export_png_requested", lambda change: self.export_plot_png())
+        self.results_panel.observe("export_txt_requested", lambda change: self.save_results(auto=False))
+        self.results_panel.observe("export_csv_requested", lambda change: self.export_results_csv())
 
         # Nothing to export yet at startup.
         self.results_panel.set_export_enabled(False)
@@ -131,7 +128,6 @@ class JVController(QObject):
         self.state.running = running
         self.config_panel.set_running(running)
         self.plot_panel.set_running(running)
-        self.running_changed.emit(running)
 
     # --- Worker signal slots ---
 
@@ -190,12 +186,9 @@ class JVController(QObject):
 
         self.results_panel.set_export_enabled(bool(self.results))
 
-        self.sweep_finished.emit(aborted, had_error)
-
     def _on_progress_update(self, percent, text):
         self.state.progress_percent = percent
         self.state.progress_text = text
-        self.progress_changed.emit(percent, text)
 
     # --- Output directory / exports ---
 

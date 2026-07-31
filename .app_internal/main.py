@@ -1,14 +1,12 @@
 """
 Entry point.
 
-Two-stage startup so a slow lab laptop shows something alive within ~1
-second
-
+Two-stage startup so a slow lab laptop shows something alive within ~1 second:
   1. Create the QApplication and a lightweight QSplashScreen using only
-     the pieces of PyQt5 that are already imported to build the splash
+     the pieces of PySide6 that are already imported to build the splash
      itself (no numpy/scipy/pyqtgraph yet).
   2. Show the splash and flush the event loop so it actually paints.
-  3. *Then* import the heavy modules (pyqtgraph, gui.main_window, which
+  3. Then import the heavy modules (pyqtgraph, gui.main_window, which
      pulls in the controllers/core/instruments stack) and build the real
      window.
   4. Swap the splash for the main window.
@@ -20,9 +18,9 @@ import sys
 
 
 def _build_splash(app):
-    from PyQt5.QtWidgets import QSplashScreen
-    from PyQt5.QtGui import QPixmap, QColor, QPainter, QFont
-    from PyQt5.QtCore import Qt
+    from PySide6.QtWidgets import QSplashScreen
+    from PySide6.QtGui import QPixmap, QColor, QPainter, QFont
+    from PySide6.QtCore import Qt
 
     width, height = 460, 260
     pix = QPixmap(width, height)
@@ -58,14 +56,14 @@ def _build_splash(app):
 
 
 def _splash_message(splash, text):
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtGui import QColor
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor
 
     splash.showMessage(text, Qt.AlignHCenter | Qt.AlignBottom, QColor("#38bdf8"))
 
 
 def main():
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
 
@@ -90,7 +88,7 @@ def main():
     splash.finish(window)
     window.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

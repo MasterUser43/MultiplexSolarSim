@@ -11,7 +11,7 @@ ___
 </p>
 
  
-Python/PyQt5 GUI for automated multi-pixel solar cell IV characterization. Integrates a **Keithley 2460 SMU** and a **Numato 16-channel USB relay** for multiplexed testing.
+Python/PySide6 & Enaml GUI for automated multi-pixel solar cell IV characterization. Integrates a **Keithley 2460 SMU** and a **Numato 16-channel USB relay** for multiplexed testing.
 
 ## Hardware Requirements
 1. **Keithley 2460 SourceMeter** (Connected via USB or Ethernet).
