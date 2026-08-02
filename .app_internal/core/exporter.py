@@ -24,10 +24,11 @@ class ResultsExporter:
                 allowed.append("_")
         return "".join(allowed).strip("_") or "solar_iv_data"
 
-    def build_daily_output_dir(self):
+    def build_daily_output_dir(self, create=True):
         date_folder = time.strftime("%Y%m%d")
         path = os.path.abspath(os.path.join(self.output_dir, date_folder))
-        os.makedirs(path, exist_ok=True)
+        if create:
+            os.makedirs(path, exist_ok=True)
         return path
 
     def _basename(self):
@@ -43,6 +44,16 @@ class ResultsExporter:
         loop = int(row.get("loop", 1))
         filename = f"{basename}_pixel_{pixel}_loop_{loop}_{timestamp}.txt"
         return os.path.join(self.build_daily_output_dir(), filename)
+
+    def preview_txt_path(self, pixel, loop=1):
+        """Same naming as build_txt_path, but never creates directories --
+        for the live dataset-card preview only, which recomputes on every
+        keystroke/pixel-selection change and must not touch disk."""
+        basename = self._basename()
+        pixel = self.safe_filename_part(str(pixel))
+        timestamp = time.strftime("%H%M%S")
+        filename = f"{basename}_pixel_{pixel}_loop_{loop}_{timestamp}.txt"
+        return os.path.join(self.build_daily_output_dir(create=False), filename)
 
     def build_results_table_path(self, timestamp):
         basename = self._basename()

@@ -20,7 +20,6 @@ class MainController(QObject):
         self._mode_controllers = []  # anything with a set_output_dir(path) method
 
         self.header.observe("connect_clicked", self._on_connect_clicked)
-        self.header.observe("browse_clicked", self._on_browse_clicked)
 
     def register_mode_controller(self, controller):
         """Mode controllers (JVController, SPOController, etc.)
@@ -29,9 +28,6 @@ class MainController(QObject):
 
     def _on_connect_clicked(self, change):
         self.connect_instruments()
-
-    def _on_browse_clicked(self, change):
-        self.choose_output_dir()
 
     def connect_instruments(self):
         self.log_panel.log_message("Connecting instruments...")

@@ -8,10 +8,17 @@ from controllers.measurement_mode import MeasurementMode
 
 
 def _make_controller():
+    config_panel = Mock()
+    # JVController.__init__ now calls _update_path_preview() once (dataset
+    # card / auto-save toggle wiring), which reads these.
+    config_panel.auto_save_enabled.return_value = False
+    config_panel.get_selected_pixels.return_value = []
+    config_panel.sample_name.return_value = "sample"
+
     return JVController(
         instrument_manager=Mock(),
         exporter=Mock(),
-        config_panel=Mock(),
+        config_panel=config_panel,
         plot_panel=Mock(),
         results_panel=Mock(),
         log_fn=Mock(),

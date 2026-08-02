@@ -7,6 +7,25 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 
 
+def set_glow(widget, color_hex, enabled, blur_radius=10):
+    """Centered glow (no offset), toggled on/off -- Qt QSS has no
+    box-shadow equivalent, so the mockup's `.trace.active`/`.pixel-pad.active`
+    glow needs a real QGraphicsEffect instead of a QSS rule. Safe to call
+    repeatedly (e.g. every time a pin's active state toggles): creates the
+    effect once, then just flips visibility after that.
+    """
+    effect = widget.graphicsEffect()
+    if not isinstance(effect, QGraphicsDropShadowEffect):
+        effect = QGraphicsDropShadowEffect(widget)
+        effect.setXOffset(0)
+        effect.setYOffset(0)
+        widget.setGraphicsEffect(effect)
+    effect.setEnabled(enabled)
+    if enabled:
+        effect.setBlurRadius(blur_radius)
+        effect.setColor(QColor(color_hex))
+
+
 def make_panel_shadow(widget, is_dark_mode=False):
     """Aesthetic choice that adds a shadow for more eye juicing.
 

@@ -38,7 +38,7 @@ DEFAULT_CUSTOM_AREA_CM2 = 0.0396
 
 # "Custom" is a single, directly-wired pixel (no relay board)
 CUSTOM_PIXEL_MODE = "Custom"
-CUSTOM_PIXEL_LABEL = "Custom"
+CUSTOM_PIXEL_LABEL = "A"
 
 
 def active_pixel_labels(pixel_mode_text):

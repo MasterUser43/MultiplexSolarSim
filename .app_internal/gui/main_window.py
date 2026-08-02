@@ -7,7 +7,7 @@ import os
 import enaml
 import pyqtgraph as pg
 from enaml.qt.qt_application import QtApplication
-from PySide6.QtCore import Qt, QTimer, QEvent
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QProgressBar, QScrollArea
 
@@ -68,7 +68,6 @@ class MainWindow(QWidget):
         self._build_ui()
         self._wire_controllers()
 
-        QTimer.singleShot(0, self._refresh_pixel_grid_layout)
         QTimer.singleShot(50, lambda: self.header_panel.post_activate_setup())
 
     def apply_style(self):
@@ -99,8 +98,6 @@ class MainWindow(QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(self.tabs)
         main.addWidget(scroll, 1)
-
-        scroll.viewport().installEventFilter(self)
 
         # TAB 1: CONFIG
         self.jv_config_panel = JVConfigPanel(is_dark_mode=self.is_dark_mode)
@@ -182,13 +179,20 @@ class MainWindow(QWidget):
             plot_panel=self.jv_plot_panel,
             results_panel=self.jv_results_panel,
             log_fn=self.log_panel.log_message,
-            get_sample_name=self.header_panel.sample_name,
+            get_sample_name=self.jv_config_panel.sample_name,
             tabs=self.tabs,
             sweep_tab_index=SWEEP_TAB_INDEX,
             parent_widget=self,
         )
         self.main_controller.register_mode_controller(self.jv_controller)
 
+        # Browse is on the dataset card.
+        self.jv_config_panel.observe(
+            "browse_requested", lambda change: self.main_controller.choose_output_dir()
+        )
+
+        # Cross-panel running state (start/abort/connect/browse all need
+        # to agree on whether a sweep is in flight).
         self.jv_controller.state.observe("running", self._on_running_changed)
         self.jv_controller.state.observe("progress_percent", self._on_progress_update)
         self.jv_controller.state.observe("progress_text", self._on_progress_update)
@@ -214,17 +218,6 @@ class MainWindow(QWidget):
     def _on_tab_changed(self, index):
         animate_tab_switch(self.tabs, index, anim_owner=self)
         self.tabs.updateGeometry()
-        self._refresh_pixel_grid_layout()
-
-    def eventFilter(self, obj, event):
-        if obj is self.scroll.viewport() and event.type() == QEvent.Resize:
-            self._refresh_pixel_grid_layout()
-        return super().eventFilter(obj, event)
-
-    def _refresh_pixel_grid_layout(self):
-        viewport_width = self.scroll.viewport().width()
-        if viewport_width > 0:
-            self.jv_config_panel.set_available_content_width(viewport_width)
 
     def _on_config_layout_changed(self, change):
         # The pixel grid rebuilt itself after a debounce delay, so

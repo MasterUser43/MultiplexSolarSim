@@ -59,8 +59,15 @@ class JVController(QObject):
         self.results_panel.observe("export_txt_requested", lambda change: self.save_results(auto=False))
         self.results_panel.observe("export_csv_requested", lambda change: self.export_results_csv())
 
+        # Dataset card (Name/Auto-Save/pixel-selection) drives the live
+        # path-preview strip.
+        self.config_panel.observe("name_changed", self._update_path_preview)
+        self.config_panel.observe("auto_save_toggled", self._update_path_preview)
+        self.config_panel.observe("layout_changed", self._update_path_preview)
+
         # Nothing to export yet at startup.
         self.results_panel.set_export_enabled(False)
+        self._update_path_preview()
 
     # --- Sweep lifecycle ---
 
@@ -138,6 +145,7 @@ class JVController(QObject):
     def _on_pixel_started(self, pixel):
         self.state.active_pixel = pixel
         self.plot_panel.set_active_pixel(pixel)
+        self._update_path_preview()
 
     def _on_pixel_result(self, record):
         self.results.append(record)
@@ -179,12 +187,16 @@ class JVController(QObject):
         else:
             self.log("Sweep complete")
 
-        # Auto-saving after every completed run with
-        # results is preserved unconditionally here.
+        # Auto-saving after every completed run with results is preserved,
+        # gated behind the Enable Auto-Save checkbox.
         if self.results:
-            self.save_results(auto=True)
+            if self.config_panel.auto_save_enabled():
+                self.save_results(auto=True)
+            else:
+                self.log("Results kept in memory -- export from the Results tab when ready")
 
         self.results_panel.set_export_enabled(bool(self.results))
+        self._update_path_preview()
 
     def _on_progress_update(self, percent, text):
         self.state.progress_percent = percent
@@ -194,6 +206,35 @@ class JVController(QObject):
 
     def set_output_dir(self, path):
         self.exporter.output_dir = path
+        self._update_path_preview()
+
+    def _update_path_preview(self, change=None):
+        """Live preview of where the next auto-saved file will land, or a
+        warning telling the researcher they'll need to export manually."""
+        panel = self.config_panel
+
+        if not panel.auto_save_enabled():
+            panel.set_path_preview(
+                "\u26A0\uFE0F Auto-save disabled. Use the \"Results\" tab to "
+                "manually export raw curves (.txt) and results table (.csv) "
+                "once the sweep completes.",
+                is_warning=True,
+            )
+            return
+
+        active = self.state.active_pixel
+        pixel = active if active and active != "--" else None
+        if pixel is None:
+            selected = panel.get_selected_pixels()
+            pixel = selected[0][0] if selected else None
+
+        if pixel is None:
+            panel.set_path_preview("Select at least one pixel to preview the save path.", is_warning=False)
+            return
+
+        self.exporter.sample_name = panel.sample_name() or "solar_iv_data"
+        path = self.exporter.preview_txt_path(pixel)
+        panel.set_path_preview(f"Auto-saving to: {path}", is_warning=False)
 
     def save_results(self, auto=False):
         if not self.results:

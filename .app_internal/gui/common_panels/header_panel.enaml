@@ -1,12 +1,12 @@
 """
 Top header bar: brand title, Keithley/Relay status LEDs, connect button,
-sample ID field, output-folder browse button, and the theme toggle.
+and the theme toggle.
 
 Pure layout + labels/buttons, no custom paint/text logic.
 """
 from enaml.core.api import d_
 from enaml.layout.api import align, hbox, spacer
-from enaml.widgets.api import Container, Field, Label, PushButton
+from enaml.widgets.api import Container, Label, PushButton
 
 from gui.effects import refresh_led_glow, set_status_led
 
@@ -16,11 +16,7 @@ enamldef HeaderPanel(Container): header:
 
     # --- Public API  ---
     event connect_clicked
-    event browse_clicked
     event theme_toggled
-
-    func sample_name():
-        return sample_id_field.text.strip()
 
     func post_activate_setup():
         # Must run after activate_proxy() creates the real Qt widgets
@@ -32,16 +28,10 @@ enamldef HeaderPanel(Container): header:
         set_status_led(keithley_led.proxy.widget, keithley_lbl.proxy.widget, "idle")
         set_status_led(relay_led.proxy.widget, relay_lbl.proxy.widget, "idle")
 
-        # connect_btn/browse_dir_btn's QSS-driven sizeHint (~34px) loses to
-        # sibling widgets in Enaml's soft hug-priority constraint solver,
-        # rendering at 22px -- verified by testing, not assumed. ThemeButton
-        # doesn't have this problem because its QSS min/max-height (36px)
-        # sets a hard Qt-level bound the solver always respects; giving
-        # these two the same kind of hard bound (rather than a relational
-        # Enaml constraint, which was tried first and didn't win the
-        # priority conflict either) is the fix that actually held up.
-        for btn in (connect_btn, browse_dir_btn):
-            btn.proxy.widget.setMinimumHeight(38)
+        # connect_btn's QSS-driven sizeHint (~34px) loses to sibling widgets
+        # in Enaml's soft hug-priority constraint solver, rendering at 22px
+        # -- verified by testing.
+        connect_btn.proxy.widget.setMinimumHeight(38)
 
     func set_connection_status(keithley_ok, relay_ok, colors):
         set_status_led(keithley_led.proxy.widget, keithley_lbl.proxy.widget,
@@ -54,7 +44,6 @@ enamldef HeaderPanel(Container): header:
 
     func set_running(running):
         connect_btn.enabled = not running
-        browse_dir_btn.enabled = not running
 
     func apply_theme(colors, is_dark):
         header.is_dark_mode = is_dark
@@ -66,14 +55,10 @@ enamldef HeaderPanel(Container): header:
     constraints = [
         hbox(
             brand_title, keithley_led, keithley_lbl, relay_led, relay_lbl,
-            connect_btn, spacer, sample_lbl, sample_id_field, browse_dir_btn,
-            theme_btn, spacing=10,
+            connect_btn, spacer, theme_btn, spacing=10,
         ),
         align("v_center", brand_title, keithley_led, keithley_lbl, relay_led,
-              relay_lbl, connect_btn, sample_lbl, sample_id_field,
-              browse_dir_btn, theme_btn),
-        sample_id_field.width >= 220,
-        sample_id_field.width <= 340,
+              relay_lbl, connect_btn, theme_btn),
     ]
 
     Label: brand_title:
@@ -99,18 +84,6 @@ enamldef HeaderPanel(Container): header:
     PushButton: connect_btn:
         text = "Connect"
         clicked :: header.connect_clicked = True
-
-    Label: sample_lbl:
-        name = "DimLabel"
-        text = "Sample ID:"
-
-    Field: sample_id_field:
-        text = "Sample_Batch_01"
-
-    PushButton: browse_dir_btn:
-        name = "PrimaryButton"
-        text = "Browse..."
-        clicked :: header.browse_clicked = True
 
     PushButton: theme_btn:
         name = "ThemeButton"
