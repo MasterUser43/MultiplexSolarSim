@@ -22,6 +22,27 @@ enamldef HeaderPanel(Container): header:
     func sample_name():
         return sample_id_field.text.strip()
 
+    func post_activate_setup():
+        # Must run after activate_proxy() creates the real Qt widgets
+        from PySide6.QtCore import Qt
+
+        for led, lbl in ((keithley_led, keithley_lbl), (relay_led, relay_lbl)):
+            led.proxy.widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        set_status_led(keithley_led.proxy.widget, keithley_lbl.proxy.widget, "idle")
+        set_status_led(relay_led.proxy.widget, relay_lbl.proxy.widget, "idle")
+
+        # connect_btn/browse_dir_btn's QSS-driven sizeHint (~34px) loses to
+        # sibling widgets in Enaml's soft hug-priority constraint solver,
+        # rendering at 22px -- verified by testing, not assumed. ThemeButton
+        # doesn't have this problem because its QSS min/max-height (36px)
+        # sets a hard Qt-level bound the solver always respects; giving
+        # these two the same kind of hard bound (rather than a relational
+        # Enaml constraint, which was tried first and didn't win the
+        # priority conflict either) is the fix that actually held up.
+        for btn in (connect_btn, browse_dir_btn):
+            btn.proxy.widget.setMinimumHeight(38)
+
     func set_connection_status(keithley_ok, relay_ok, colors):
         set_status_led(keithley_led.proxy.widget, keithley_lbl.proxy.widget,
                         "ok" if keithley_ok else "bad")
@@ -56,42 +77,42 @@ enamldef HeaderPanel(Container): header:
     ]
 
     Label: brand_title:
+        name = "BrandTitle"
         text = "MULTIPLEX SIM"
 
     Label: keithley_led:
-        name = "keithley_led"
-        text = "\u25cf"  # status dot; color/glow driven by set_connection_status
+        name = "StatusLED"
+        text = ""
 
     Label: keithley_lbl:
-        name = "keithley_lbl"
+        name = "StatusLabel"
         text = "KEITHLEY\n2460"
 
     Label: relay_led:
-        name = "relay_led"
-        text = "\u25cf"
+        name = "StatusLED"
+        text = ""
 
     Label: relay_lbl:
-        name = "relay_lbl"
+        name = "StatusLabel"
         text = "RELAY\nMATRIX"
 
     PushButton: connect_btn:
-        name = "connect_btn"
         text = "Connect"
         clicked :: header.connect_clicked = True
 
     Label: sample_lbl:
+        name = "DimLabel"
         text = "Sample ID:"
 
     Field: sample_id_field:
-        name = "sample_id_field"
         text = "Sample_Batch_01"
 
     PushButton: browse_dir_btn:
-        name = "browse_dir_btn"
+        name = "PrimaryButton"
         text = "Browse..."
         clicked :: header.browse_clicked = True
 
     PushButton: theme_btn:
-        name = "theme_btn"
+        name = "ThemeButton"
         text = "\u2600\ufe0f" if header.is_dark_mode else "\U0001F319"
         clicked :: header.theme_toggled = True

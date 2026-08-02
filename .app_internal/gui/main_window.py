@@ -69,6 +69,7 @@ class MainWindow(QWidget):
         self._wire_controllers()
 
         QTimer.singleShot(0, self._refresh_pixel_grid_layout)
+        QTimer.singleShot(50, lambda: self.header_panel.post_activate_setup())
 
     def apply_style(self):
         self.setFont(QFont("Segoe UI", 10))
