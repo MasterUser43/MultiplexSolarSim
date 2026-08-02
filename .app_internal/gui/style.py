@@ -358,6 +358,10 @@ def _build_theme(c):
         border: 2px solid {c['glass_border']};
         border-radius: 8px;
     }}
+    QWidget#PadColumn {{
+        background: transparent;
+        border: none;
+    }}
     QPushButton#PadBtn {{
         border: 2px dashed {c['border']};
         background-color: {c['bg_panel']};

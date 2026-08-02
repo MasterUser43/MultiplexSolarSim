@@ -233,7 +233,8 @@ class JVConfigPanel(RawWidget):
         self._left_pads_layout = QVBoxLayout()
         self._left_pads_layout.setSpacing(6)
         left_wrap = QWidget()
-        left_wrap.setStyleSheet("background: transparent; border: none;")
+        left_wrap.setObjectName("PadColumn")
+        left_wrap.setAttribute(Qt.WA_StyledBackground, True)
         left_wrap.setLayout(self._left_pads_layout)
         glass_row.addWidget(left_wrap)
 
@@ -246,7 +247,8 @@ class JVConfigPanel(RawWidget):
         self._right_pads_layout = QVBoxLayout()
         self._right_pads_layout.setSpacing(6)
         right_wrap = QWidget()
-        right_wrap.setStyleSheet("background: transparent; border: none;")
+        right_wrap.setObjectName("PadColumn")
+        right_wrap.setAttribute(Qt.WA_StyledBackground, True)
         right_wrap.setLayout(self._right_pads_layout)
         glass_row.addWidget(right_wrap)
 
@@ -353,6 +355,7 @@ class JVConfigPanel(RawWidget):
         btn.setObjectName("PadBtn")
         btn.setFixedSize(38, 24)
         btn.setProperty("state", "active" if self._pin_active.get(pin) else "inactive")
+        self._repolish(btn)
         btn.clicked.connect(functools.partial(self._select_pin, pin))
         self._pad_buttons[pin] = btn
         return btn
@@ -367,6 +370,7 @@ class JVConfigPanel(RawWidget):
         trace.setObjectName("Trace")
         trace.setProperty("state", "active" if is_active else "inactive")
         trace.setGeometry(0 if is_left else _GLASS_W - _TRACE_W, top_y, _TRACE_W, _TRACE_H)
+        self._repolish(trace)  # same creation-time repolish requirement as pad buttons
         set_glow(trace, accent, is_active, blur_radius=6)
         trace.show()
         self._trace_widgets[pin] = trace
@@ -378,6 +382,7 @@ class JVConfigPanel(RawWidget):
             _TRACE_W if is_left else _GLASS_W - _TRACE_W - _PAD_W,
             top_y - _PAD_H // 2, _PAD_W, _PAD_H,
         )
+        self._repolish(pad)
         set_glow(pad, accent, is_active, blur_radius=8)
         pad.show()
         self._pixel_pad_widgets[pin] = pad
