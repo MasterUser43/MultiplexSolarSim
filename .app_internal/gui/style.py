@@ -194,7 +194,7 @@ def _build_theme(c):
     QLabel#BrandTitle {{
         color: {c['accent']};
         font-weight: 850;
-        font-size: 14pt;
+        font-size: 12pt;
         letter-spacing: 1px;
     }}
     QLabel#PanelTitle {{

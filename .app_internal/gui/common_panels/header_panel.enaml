@@ -28,10 +28,13 @@ enamldef HeaderPanel(Container): header:
         set_status_led(keithley_led.proxy.widget, keithley_lbl.proxy.widget, "idle")
         set_status_led(relay_led.proxy.widget, relay_lbl.proxy.widget, "idle")
 
-        # connect_btn's QSS-driven sizeHint (~34px) loses to sibling widgets
-        # in Enaml's soft hug-priority constraint solver, rendering at 22px
-        # -- verified by testing.
         connect_btn.proxy.widget.setMinimumHeight(38)
+
+        for w in (brand_title.proxy.widget, connect_btn.proxy.widget,
+                  keithley_lbl.proxy.widget, relay_lbl.proxy.widget):
+            w.setMinimumWidth(w.sizeHint().width())
+       
+        header.request_relayout()
 
     func set_connection_status(keithley_ok, relay_ok, colors):
         set_status_led(keithley_led.proxy.widget, keithley_lbl.proxy.widget,

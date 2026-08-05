@@ -165,6 +165,16 @@ class JVController(QObject):
             format_metric(metrics["FF"], 2),
         )
 
+        # Incremental auto-save & write THIS pixel's result immediately.
+        if self.config_panel.auto_save_enabled():
+            self.exporter.sample_name = self.get_sample_name() or "solar_iv_data"
+            try:
+                self.exporter.save_pixel_now(record)
+                self.log(f"OK: Auto-saved pixel {record['pixel']} (loop {record['loop']})")
+            except Exception as e:
+                self.log(f"ERROR: could not auto-save pixel {record['pixel']}: {e}")
+        self._update_path_preview()
+
     def _on_pixel_faulted(self, pixel, area, fault, loop_number):
         self.state.faults.append(
             {"pixel": pixel, "area": area, "fault": fault, "loop": loop_number}
@@ -191,7 +201,10 @@ class JVController(QObject):
         # gated behind the Enable Auto-Save checkbox.
         if self.results:
             if self.config_panel.auto_save_enabled():
-                self.save_results(auto=True)
+                self.log(
+                    f"Auto-save complete: {len(self.results)} pixel result(s) "
+                    f"written to {self.exporter.manifest_path()}"
+                )
             else:
                 self.log("Results kept in memory -- export from the Results tab when ready")
 

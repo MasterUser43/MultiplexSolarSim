@@ -1,11 +1,30 @@
 """
 Handles building output paths and writing per-pixel TXT files and the
 summary results table. Pure I/O.
+
+Auto-save uses a different on-disk layout than the manual batch export
+
+  Project_Folder/                  <- exporter.output_dir
+  |-- session_summary.csv          <- one persistent file
+  |-- raw_curves/                  <- raw_curves_dir(): one .txt per pixel
+      |-- SampleA_pixel_A_loop_1_JV.txt
+      |-- SampleA_pixel_A_loop_1_JV_(001).txt   <- safe-overwrite suffix.
 """
+import csv
 import os
 import time
 
 import numpy as np
+
+RAW_CURVES_SUBDIR = "raw_curves"
+MANIFEST_FILENAME = "session_summary.csv"
+
+_MANIFEST_HEADER = [
+    "timestamp", "sample_name", "loop", "pixel", "area_cm2",
+    "Voc_V", "Jsc_mA_cm2", "FF", "PCE_percent", "Vmpp_V", "Jmp_mA_cm2", "Pmax_mW_cm2",
+    "Rs_diode_eq_ohm", "Rsh_diode_eq_ohm", "Rs_derivative_ohm", "Rsh_derivative_ohm",
+    "raw_curve_file",
+]
 
 
 class ResultsExporter:
@@ -24,13 +43,6 @@ class ResultsExporter:
                 allowed.append("_")
         return "".join(allowed).strip("_") or "solar_iv_data"
 
-    def build_daily_output_dir(self, create=True):
-        date_folder = time.strftime("%Y%m%d")
-        path = os.path.abspath(os.path.join(self.output_dir, date_folder))
-        if create:
-            os.makedirs(path, exist_ok=True)
-        return path
-
     def _basename(self):
         basename = os.path.basename((self.sample_name or "").strip() or "solar_iv_data")
         root, ext = os.path.splitext(basename)
@@ -38,22 +50,106 @@ class ResultsExporter:
             basename = root
         return self.safe_filename_part(basename)
 
+    # --- Auto-save ---
+
+    def raw_curves_dir(self, create=True):
+        path = os.path.abspath(os.path.join(self.output_dir, RAW_CURVES_SUBDIR))
+        if create:
+            os.makedirs(path, exist_ok=True)
+        return path
+
+    def manifest_path(self):
+        return os.path.abspath(os.path.join(self.output_dir, MANIFEST_FILENAME))
+
+    def _unique_raw_curve_filename(self, pixel, loop, probe_disk=True):
+        """Overwrite naming: {name}_pixel_{p}_loop_{n}_JV.txt, and if
+        that exact name already exists in raw_curves/, append _(001), _(002), ... 
+        until a free name """
+        basename = self._basename()
+        pixel_part = self.safe_filename_part(str(pixel))
+        stem = f"{basename}_pixel_{pixel_part}_loop_{int(loop)}_JV"
+
+        if not probe_disk:
+            return f"{stem}.txt"
+
+        folder = self.raw_curves_dir(create=False)
+        candidate = f"{stem}.txt"
+        if not os.path.exists(os.path.join(folder, candidate)):
+            return candidate
+        n = 1
+        while True:
+            candidate = f"{stem}_({n:03d}).txt"
+            if not os.path.exists(os.path.join(folder, candidate)):
+                return candidate
+            n += 1
+
+    def preview_txt_path(self, pixel, loop=1):
+        """Generates the same filename as save_pixel_now but w/o writing to disk."""
+        filename = self._unique_raw_curve_filename(pixel, loop, probe_disk=True)
+        return os.path.join(self.raw_curves_dir(create=False), filename)
+
+    def save_pixel_now(self, record):
+        """Saves a single completed pixel immediately: writes the raw curve 
+        to raw_curves/ and appends a row to session_summary.csv (creating 
+        it if needed). 
+
+        Saving incrementally prevents data loss if the system crashes mid-sweep.
+        """
+        filename = self._unique_raw_curve_filename(record["pixel"], record["loop"])
+        curve_path = os.path.join(self.raw_curves_dir(), filename)
+
+        V = np.asarray(record["voltage_v"], dtype=float)
+        J = np.asarray(record["current_density_ma_cm2"], dtype=float)
+        with open(curve_path, "w") as f:
+            f.write("# voltage_v\tcurrent_density_mA_cm2\n")
+            for voltage, current_density in zip(V, J):
+                f.write(f"{voltage:.8g}\t{current_density:.8g}\n")
+
+        manifest_path = self.manifest_path()
+        write_header = not os.path.exists(manifest_path)
+        with open(manifest_path, "a", newline="") as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow(_MANIFEST_HEADER)
+            writer.writerow([
+                time.strftime("%Y-%m-%d %H:%M:%S"),
+                self.sample_name,
+                int(record["loop"]),
+                record["pixel"],
+                f"{record['area_cm2']:.8g}",
+                f"{record['Voc']:.8g}",
+                f"{record['Jsc']:.8g}",
+                f"{record['FF']:.8g}",
+                f"{record['PCE']:.8g}",
+                f"{record['Vmpp']:.8g}",
+                f"{record['Jmpp']:.8g}",
+                f"{record['Pmax']:.8g}",
+                f"{record.get('Rs_diode_eq', float('nan')):.8g}",
+                f"{record.get('Rsh_diode_eq', float('nan')):.8g}",
+                f"{record.get('Rs_derivative', float('nan')):.8g}",
+                f"{record.get('Rsh_derivative', float('nan')):.8g}",
+                filename,
+            ])
+
+        return curve_path
+
+    # --- Manual batch export (Export .TXT / Export .CSV buttons) ---
+    # Unchanged: a separate, user-directed one-shot dump to a folder picked
+    # in that moment, not the ongoing auto-save layout above.
+
+    def build_daily_output_dir(self, create=True):
+        date_folder = time.strftime("%Y%m%d")
+        path = os.path.abspath(os.path.join(self.output_dir, date_folder))
+        if create:
+            os.makedirs(path, exist_ok=True)
+        return path
+
     def build_txt_path(self, row, timestamp):
         basename = self._basename()
         pixel = self.safe_filename_part(str(row["pixel"]))
         loop = int(row.get("loop", 1))
         filename = f"{basename}_pixel_{pixel}_loop_{loop}_{timestamp}.txt"
         return os.path.join(self.build_daily_output_dir(), filename)
-
-    def preview_txt_path(self, pixel, loop=1):
-        """Same naming as build_txt_path, but never creates directories --
-        for the live dataset-card preview only, which recomputes on every
-        keystroke/pixel-selection change and must not touch disk."""
-        basename = self._basename()
-        pixel = self.safe_filename_part(str(pixel))
-        timestamp = time.strftime("%H%M%S")
-        filename = f"{basename}_pixel_{pixel}_loop_{loop}_{timestamp}.txt"
-        return os.path.join(self.build_daily_output_dir(create=False), filename)
 
     def build_results_table_path(self, timestamp):
         basename = self._basename()
