@@ -46,7 +46,7 @@ def _activate(declarative_obj):
 
 
 class MainWindow(QWidget):
-    def __init__(self):
+    def __init__(self, mock=False):
         super().__init__()
 
         if QtApplication.instance() is None:
@@ -55,6 +55,7 @@ class MainWindow(QWidget):
         self.is_dark_mode = False
         self._shadow_widgets = []
         self._theme_aware_panels = []  # anything with an apply_theme(colors, is_dark_mode) method
+        self.mock = mock
 
         self.setWindowTitle("Multiplex Solar Simulator - IV Characterization")
         self.resize(1440, 900)
@@ -62,7 +63,7 @@ class MainWindow(QWidget):
         self.setObjectName("Root")
 
         self.output_dir = get_data_dir()
-        self.instrument_manager = InstrumentManager()
+        self.instrument_manager = InstrumentManager(mock=mock)
 
         self.apply_style()
         self._build_ui()

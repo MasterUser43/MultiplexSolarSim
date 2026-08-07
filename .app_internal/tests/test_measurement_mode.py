@@ -11,7 +11,8 @@ def _make_controller():
     config_panel = Mock()
     # JVController.__init__ now calls _update_path_preview() once (dataset
     # card / auto-save toggle wiring), which reads these.
-    config_panel.auto_save_enabled.return_value = False
+    config_panel.autosave_table_enabled.return_value = False
+    config_panel.autosave_curves_enabled.return_value = False
     config_panel.get_selected_pixels.return_value = []
     config_panel.sample_name.return_value = "sample"
 

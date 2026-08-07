@@ -2,7 +2,7 @@
 Small, generic Qt visual-craft helpers w/o business-logic dependency.
 Any panel can call these.
 """
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QAbstractAnimation
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QAbstractAnimation
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 
@@ -77,41 +77,22 @@ def set_status_led(led, label, state):
 
 
 def animate_tab_switch(tabs, index, anim_owner):
-    """Fades the newly-selected tab's content in while sliding it up a few
-    pixels."""
+    """Fades the newly-selected tab's content in."""
     widget = tabs.widget(index)
     if widget is None:
         return None
 
-    animations = []
-    already_has_effect = widget.graphicsEffect() is not None
+    if widget.graphicsEffect() is not None:
+        return None
 
-    if not already_has_effect:
-        opacity_effect = QGraphicsOpacityEffect(widget)
-        widget.setGraphicsEffect(opacity_effect)
+    opacity_effect = QGraphicsOpacityEffect(widget)
+    widget.setGraphicsEffect(opacity_effect)
 
-        fade = QPropertyAnimation(opacity_effect, b"opacity", anim_owner)
-        fade.setDuration(250)
-        fade.setStartValue(0.0)
-        fade.setEndValue(1.0)
-        fade.setEasingCurve(QEasingCurve.OutCubic)
-        animations.append(fade)
-
-    end_rect = widget.geometry()
-    start_rect = end_rect.translated(0, 8)
-    slide = QPropertyAnimation(widget, b"geometry", anim_owner)
-    slide.setDuration(250)
-    slide.setStartValue(start_rect)
-    slide.setEndValue(end_rect)
-    slide.setEasingCurve(QEasingCurve.OutCubic)
-    animations.append(slide)
-
-    group = QParallelAnimationGroup(anim_owner)
-    for anim in animations:
-        group.addAnimation(anim)
-
-    if not already_has_effect:
-        # Drop the opacity effect once the animation finishes.
-        group.finished.connect(lambda: widget.setGraphicsEffect(None))
-    group.start(QAbstractAnimation.DeleteWhenStopped)
-    return group
+    fade = QPropertyAnimation(opacity_effect, b"opacity", anim_owner)
+    fade.setDuration(250)
+    fade.setStartValue(0.0)
+    fade.setEndValue(1.0)
+    fade.setEasingCurve(QEasingCurve.OutCubic)
+    fade.finished.connect(lambda: widget.setGraphicsEffect(None))
+    fade.start(QAbstractAnimation.DeleteWhenStopped)
+    return fade

@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QTextCursor, QTextCharFormat, QTextFormat
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit,
-    QPushButton, QTextEdit,
+    QPushButton, QTextEdit, QWidget,
 )
 
 from core.paths import get_logs_dir
@@ -40,9 +40,13 @@ class LogPanel(RawWidget):
     _shadow = Value()  # QGraphicsDropShadowEffect, from make_panel_shadow()
 
     def create_widget(self, parent):
-        card = QFrame(parent)
+        container = QWidget(parent)
+        outer_layout = QVBoxLayout(container)
+
+        card = QFrame()
         card.setObjectName("PanelContainer")
         card.setAttribute(Qt.WA_StyledBackground, True)
+        outer_layout.addWidget(card)
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -82,7 +86,7 @@ class LogPanel(RawWidget):
 
         self._shadow = make_panel_shadow(card, self.is_dark_mode)
 
-        return card
+        return container
 
     # --- Public API  ---
 

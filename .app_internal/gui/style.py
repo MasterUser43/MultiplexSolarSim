@@ -59,6 +59,8 @@ def _build_theme(c):
     QWidget {{
         background-color: {c['bg_base']};
         color: {c['text_main']};
+        font-family: 'Segoe UI';
+        font-size: 10pt;
     }}
 
     QTabWidget::pane {{ border: none; }}
@@ -291,13 +293,13 @@ def _build_theme(c):
     }}
     QLabel#MetricLabel {{
         color: {c['accent']};
-        font-size: 24px;
+        font-size: 16px;
         font-weight: bold;
         letter-spacing: 1px;
     }}
     QLabel#MetricValue {{
         color: {c['text_main']};
-        font-size: 40px;
+        font-size: 30px;
         font-weight: 800;
         letter-spacing: -0.5px;
     }}

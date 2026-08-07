@@ -88,7 +88,7 @@ class ResultsExporter:
         filename = self._unique_raw_curve_filename(pixel, loop, probe_disk=True)
         return os.path.join(self.raw_curves_dir(create=False), filename)
 
-    def save_pixel_now(self, record):
+    def save_curve_now(self, record):
         """Saves a single completed pixel immediately: writes the raw curve 
         to raw_curves/ and appends a row to session_summary.csv (creating 
         it if needed). 
@@ -105,6 +105,12 @@ class ResultsExporter:
             for voltage, current_density in zip(V, J):
                 f.write(f"{voltage:.8g}\t{current_density:.8g}\n")
 
+        return curve_path, filename
+
+    def save_table_row_now(self, record, curve_filename=None):
+        """Incremental auto-save of ONE just-completed pixel's row into the
+        persistent session_summary.csv.
+        """
         manifest_path = self.manifest_path()
         write_header = not os.path.exists(manifest_path)
         with open(manifest_path, "a", newline="") as f:
@@ -128,33 +134,22 @@ class ResultsExporter:
                 f"{record.get('Rsh_diode_eq', float('nan')):.8g}",
                 f"{record.get('Rs_derivative', float('nan')):.8g}",
                 f"{record.get('Rsh_derivative', float('nan')):.8g}",
-                filename,
+                curve_filename or "",
             ])
-
-        return curve_path
 
     # --- Manual batch export (Export .TXT / Export .CSV buttons) ---
     # Unchanged: a separate, user-directed one-shot dump to a folder picked
     # in that moment, not the ongoing auto-save layout above.
 
-    def build_daily_output_dir(self, create=True):
-        date_folder = time.strftime("%Y%m%d")
-        path = os.path.abspath(os.path.join(self.output_dir, date_folder))
-        if create:
-            os.makedirs(path, exist_ok=True)
-        return path
-
-    def build_txt_path(self, row, timestamp):
-        basename = self._basename()
-        pixel = self.safe_filename_part(str(row["pixel"]))
-        loop = int(row.get("loop", 1))
-        filename = f"{basename}_pixel_{pixel}_loop_{loop}_{timestamp}.txt"
-        return os.path.join(self.build_daily_output_dir(), filename)
+    def build_txt_path(self, row):
+        """Curve file path for manual Export .TXT."""
+        filename = self._unique_raw_curve_filename(row["pixel"], row.get("loop", 1))
+        return os.path.join(self.raw_curves_dir(), filename)
 
     def build_results_table_path(self, timestamp):
         basename = self._basename()
         filename = f"{basename}_results_{timestamp}.txt"
-        return os.path.join(self.build_daily_output_dir(), filename)
+        return os.path.join(os.path.abspath(self.output_dir), filename)
 
     def save_results_table(self, results, timestamp):
         path = self.build_results_table_path(timestamp)
@@ -195,12 +190,11 @@ class ResultsExporter:
             self.logger("WARNING: No results to save")
             return
 
-        timestamp = time.strftime("%H%M%S")
         saved_paths = []
 
         try:
             for row in results:
-                path = self.build_txt_path(row, timestamp)
+                path = self.build_txt_path(row)
                 V = np.asarray(row["voltage_v"], dtype=float)
                 I = np.asarray(row["current_a"], dtype=float)
                 J = (I / row["area_cm2"]) * 1000
@@ -211,13 +205,14 @@ class ResultsExporter:
                         f.write(f"{voltage:.8g}\t{current_density:.8g}\n")
                 saved_paths.append(path)
 
-            self.save_results_table(results, timestamp)
+            timestamp = time.strftime("%H%M%S")
+            table_path = self.save_results_table(results, timestamp)
 
             mode = "Auto-saved" if auto else "Saved"
-            folder = self.build_daily_output_dir()
             self.logger(
-                f"{mode} {len(saved_paths)} JV text file(s) and "
-                f"1 results table file to {folder}"
+                f"{mode} {len(saved_paths)} JV text file(s) to "
+                f"{self.raw_curves_dir(create=False)} and 1 results table "
+                f"file to {table_path}"
             )
         except Exception as e:
             self.logger(f"ERROR: could not save TXT files: {e}")

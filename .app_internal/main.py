@@ -65,6 +65,8 @@ def _splash_message(splash, text):
 def main():
     from PySide6.QtWidgets import QApplication
 
+    mock = "--mock" in sys.argv
+
     app = QApplication(sys.argv)
 
     # --- Stage 1: splash appears before any heavy imports ---
@@ -83,7 +85,7 @@ def main():
     from gui.main_window import MainWindow
 
     pg.setConfigOptions(antialias=True)
-    window = MainWindow()
+    window = MainWindow(mock=mock)
 
     splash.finish(window)
     window.show()

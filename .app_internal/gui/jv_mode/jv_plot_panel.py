@@ -95,15 +95,6 @@ class JVPlotPanel(RawWidget):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
 
-        title_lbl = QLabel("LIVE STATUS")
-        title_lbl.setObjectName("PanelTitleLarge")
-        layout.addWidget(title_lbl)
-
-        divider = QFrame()
-        divider.setObjectName("Divider")
-        divider.setFrameShape(QFrame.HLine)
-        layout.addWidget(divider)
-
         self._hud_active_pixel = QLabel("Latest Pixel: --")
         self._hud_active_pixel.setObjectName("HudActivePixel")
         layout.addWidget(self._hud_active_pixel)

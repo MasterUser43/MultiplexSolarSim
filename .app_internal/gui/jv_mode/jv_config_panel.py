@@ -20,7 +20,7 @@ from controllers.jv_worker import (
     pixel_uses_relay,
 )
 from instruments.keithley2460 import KEITHLEY_DEFAULT_COMPLIANCE_A
-from gui.custom_widgets import NoWheelSpinBox, NoWheelDoubleSpinBox, NoWheelComboBox
+from gui.custom_widgets import NoWheelComboBox, PlainIntField, PlainDoubleField
 from gui.effects import make_panel_shadow, set_glow, update_shadow_color
 from gui.style import get_theme_colors
 
@@ -38,17 +38,18 @@ class JVConfigPanel(RawWidget):
     layout_changed = d_(Event(), writable=False)
     browse_requested = d_(Event(), writable=False)
     name_changed = d_(Event(), writable=False)
-    auto_save_toggled = d_(Event(), writable=False)
+    autosave_table_toggled = d_(Event(), writable=False)
+    autosave_curves_toggled = d_(Event(), writable=False)
 
     # Sweep-parameter inputs
-    _v0 = Typed(NoWheelDoubleSpinBox)
-    _v1 = Typed(NoWheelDoubleSpinBox)
-    _points = Typed(NoWheelSpinBox)
+    _v0 = Typed(PlainDoubleField)
+    _v1 = Typed(PlainDoubleField)
+    _points = Typed(PlainIntField)
     _dir = Typed(NoWheelComboBox)
-    _loops = Typed(NoWheelSpinBox)
-    _point_delay = Typed(NoWheelDoubleSpinBox)
-    _compliance_ma = Typed(NoWheelDoubleSpinBox)
-    _pin = Typed(NoWheelDoubleSpinBox)
+    _loops = Typed(PlainIntField)
+    _point_delay = Typed(PlainDoubleField)
+    _compliance_ma = Typed(PlainDoubleField)
+    _pin = Typed(PlainDoubleField)
     _start_btn = Typed(QPushButton)
 
     _top_layout = Typed(QHBoxLayout)
@@ -77,7 +78,8 @@ class JVConfigPanel(RawWidget):
 
     # Dataset card: Name field, browse icon button, auto-save toggle + path preview
     _name_field = Typed(QLineEdit)
-    _auto_save_checkbox = Typed(QCheckBox)
+    _autosave_table_checkbox = Typed(QCheckBox)
+    _autosave_curves_checkbox = Typed(QCheckBox)
     _path_preview = Typed(QLabel)
 
     def create_widget(self, parent):
@@ -119,17 +121,17 @@ class JVConfigPanel(RawWidget):
         divider.setFrameShape(QFrame.HLine)
         layout.addWidget(divider)
 
-        self._v0 = NoWheelDoubleSpinBox()
+        self._v0 = PlainDoubleField()
         self._v0.setRange(-5, 5)
         self._v0.setDecimals(2)
         self._v0.setValue(-0.2)
 
-        self._v1 = NoWheelDoubleSpinBox()
+        self._v1 = PlainDoubleField()
         self._v1.setRange(-5, 5)
         self._v1.setDecimals(2)
         self._v1.setValue(1.3)
 
-        self._points = NoWheelSpinBox()
+        self._points = PlainIntField()
         self._points.setRange(2, 2000)
         self._points.setValue(100)
 
@@ -137,21 +139,21 @@ class JVConfigPanel(RawWidget):
         self._dir.addItems(["Forward", "Reverse"])
         self._dir.setCurrentText("Reverse")
 
-        self._loops = NoWheelSpinBox()
+        self._loops = PlainIntField()
         self._loops.setRange(1, 20)
         self._loops.setValue(1)
 
-        self._point_delay = NoWheelDoubleSpinBox()
+        self._point_delay = PlainDoubleField()
         self._point_delay.setRange(0.001, 10)
         self._point_delay.setDecimals(2)
         self._point_delay.setValue(0.01)
 
-        self._compliance_ma = NoWheelDoubleSpinBox()
+        self._compliance_ma = PlainDoubleField()
         self._compliance_ma.setRange(0.001, 1000)
         self._compliance_ma.setDecimals(0)
         self._compliance_ma.setValue(KEITHLEY_DEFAULT_COMPLIANCE_A * 1000)
 
-        self._pin = NoWheelDoubleSpinBox()
+        self._pin = PlainDoubleField()
         self._pin.setRange(0.001, 5000)
         self._pin.setDecimals(0)
         self._pin.setValue(100.0)
@@ -431,7 +433,7 @@ class JVConfigPanel(RawWidget):
             self._inspector_main_layout.addWidget(lbl)
             self._inspector_main_layout.addStretch(1)
 
-            area_input = NoWheelDoubleSpinBox()
+            area_input = PlainDoubleField()
             area_input.setRange(0.0001, 100)
             area_input.setDecimals(4)
             area_input.setValue(self._default_area)
@@ -464,7 +466,7 @@ class JVConfigPanel(RawWidget):
             self._inspector_main_layout.addWidget(override_check)
 
             is_override = bool(self._pin_overrides.get(pin))
-            area_input = NoWheelDoubleSpinBox()
+            area_input = PlainDoubleField()
             area_input.setRange(0.0001, 100)
             area_input.setDecimals(4)
             area_input.setValue(self._pin_areas.get(pin, self._default_area) if is_override else self._default_area)
@@ -543,10 +545,15 @@ class JVConfigPanel(RawWidget):
         name_row.addWidget(browse_btn)
         layout.addLayout(name_row)
 
-        self._auto_save_checkbox = QCheckBox("Enable Auto-Save")
-        self._auto_save_checkbox.setChecked(True)
-        self._auto_save_checkbox.toggled.connect(self._on_auto_save_toggled)
-        layout.addWidget(self._auto_save_checkbox)
+        self._autosave_table_checkbox = QCheckBox("Autosave results table")
+        self._autosave_table_checkbox.setChecked(True)
+        self._autosave_table_checkbox.toggled.connect(self._on_autosave_table_toggled)
+        layout.addWidget(self._autosave_table_checkbox)
+
+        self._autosave_curves_checkbox = QCheckBox("Autosave individual sweep data points")
+        self._autosave_curves_checkbox.setChecked(True)
+        self._autosave_curves_checkbox.toggled.connect(self._on_autosave_curves_toggled)
+        layout.addWidget(self._autosave_curves_checkbox)
 
         self._path_preview = QLabel("")
         self._path_preview.setObjectName("PathPreview")
@@ -562,8 +569,11 @@ class JVConfigPanel(RawWidget):
     def _on_browse_clicked(self):
         self.browse_requested = True
 
-    def _on_auto_save_toggled(self, checked):
-        self.auto_save_toggled = True
+    def _on_autosave_table_toggled(self, checked):
+        self.autosave_table_toggled = True
+
+    def _on_autosave_curves_toggled(self, checked):
+        self.autosave_curves_toggled = True
 
     def _add_shadow(self, widget):
         effect = make_panel_shadow(widget, self.is_dark_mode)
@@ -601,9 +611,9 @@ class JVConfigPanel(RawWidget):
 
     def get_selected_pixels(self):
         use_relay = pixel_uses_relay(self._pixel_mode.currentText())
-        left_pins, right_pins = self._current_pin_lists()
+        ordered_pins = active_pixel_labels(self._pixel_mode.currentText())
         selected = []
-        for pin in left_pins + right_pins:
+        for pin in ordered_pins:
             if self._pin_active.get(pin):
                 channel = PIXEL_TO_RELAY_CHANNEL[pin] if use_relay else None
                 selected.append((pin, channel, self._pin_areas.get(pin, self._default_area)))
@@ -612,7 +622,8 @@ class JVConfigPanel(RawWidget):
     def set_running(self, running):
         self._start_btn.setEnabled(not running)
         self._name_field.setEnabled(not running)
-        self._auto_save_checkbox.setEnabled(not running)
+        self._autosave_table_checkbox.setEnabled(not running)
+        self._autosave_curves_checkbox.setEnabled(not running)
 
     def apply_theme(self, colors, is_dark_mode):
         self.is_dark_mode = is_dark_mode
@@ -632,8 +643,11 @@ class JVConfigPanel(RawWidget):
     def sample_name(self):
         return self._name_field.text().strip()
 
-    def auto_save_enabled(self):
-        return self._auto_save_checkbox.isChecked()
+    def autosave_table_enabled(self):
+        return self._autosave_table_checkbox.isChecked()
+
+    def autosave_curves_enabled(self):
+        return self._autosave_curves_checkbox.isChecked()
 
     def set_path_preview(self, text, is_warning):
         self._path_preview.setText(text)

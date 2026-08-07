@@ -1,21 +1,31 @@
 """
 Small, generic PyQt/pyqtgraph widget overrides with no business logic.
 """
-from PySide6.QtCore import Qt, QRectF, QSize
-from PySide6.QtGui import QTextDocument, QFont, QFontMetrics
+from PySide6.QtCore import Qt, QRectF, QSize, Signal
+from PySide6.QtGui import QTextDocument, QFont, QFontMetrics, QDoubleValidator, QIntValidator
 from PySide6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QComboBox, QHeaderView, QStyle, QStyleOptionHeader,
-    QTabBar, QTabWidget,
+    QTabBar, QTabWidget, QAbstractSpinBox, QLineEdit,
 )
 import pyqtgraph as pg
 
 
 class NoWheelSpinBox(QSpinBox):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
     def wheelEvent(self, event):
         event.ignore()
 
 
 class NoWheelDoubleSpinBox(QDoubleSpinBox):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
     def wheelEvent(self, event):
         event.ignore()
 
@@ -23,6 +33,89 @@ class NoWheelDoubleSpinBox(QDoubleSpinBox):
 class NoWheelComboBox(QComboBox):
     def wheelEvent(self, event):
         event.ignore()
+
+
+class _PlainNumberField(QLineEdit):
+    """QLineEdit-based numeric field exposing a QSpinBox/QDoubleSpinBox-
+    shaped API (value()/setValue()/setRange()/valueChanged) s.t. existing
+    call sites (setRange/setDecimals/setValue/.value()/.valueChanged.connect)
+    work fine. (Up/Down arrow key response target).
+    """
+    valueChanged = Signal(float)
+    _decimals = 0
+    _is_int = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._minimum = 0.0
+        self._maximum = 100.0
+        self._value = 0.0
+        self._validator = QDoubleValidator(self)
+        self.setValidator(self._validator)
+        self.textEdited.connect(self._on_text_edited)
+        self.editingFinished.connect(self._on_editing_finished)
+        self.setValue(0)
+
+    def setRange(self, minimum, maximum):
+        self._minimum = minimum
+        self._maximum = maximum
+        self._validator.setRange(minimum, maximum, self._decimals)
+
+    def setDecimals(self, n):
+        self._decimals = n
+        self._validator.setDecimals(n)
+
+    def value(self):
+        return int(self._value) if self._is_int else self._value
+
+    def setValue(self, value):
+        value = max(self._minimum, min(self._maximum, value))
+        changed = value != self._value
+        self._value = value
+        self.setText(self._format(value))
+        if changed:
+            self.valueChanged.emit(self.value())
+
+    def _format(self, value):
+        if self._is_int or self._decimals == 0:
+            return str(int(round(value)))
+        return f"{value:.{self._decimals}f}"
+
+    def _on_text_edited(self, text):
+        try:
+            parsed = float(text)
+        except ValueError:
+            return  # mid-edit, e.g. just "-" or "" or "." -- let them keep typing
+        clamped = max(self._minimum, min(self._maximum, parsed))
+        self._value = clamped
+        self.valueChanged.emit(self.value())
+
+    def _on_editing_finished(self):
+        # Reformat/clamp the displayed text once editing settles (blur or
+        # Enter) -- same moment a spinbox would normalize its display.
+        self.setValue(self._value)
+
+
+class PlainIntField(_PlainNumberField):
+    """Integer counterpart, e.g. Step Count/Loops -- drop-in for
+    NoWheelSpinBox at call sites that never call setDecimals()."""
+    _is_int = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._validator = QIntValidator(self)
+        self.setValidator(self._validator)
+
+    def setRange(self, minimum, maximum):
+        self._minimum = minimum
+        self._maximum = maximum
+        self._validator.setRange(int(minimum), int(maximum))
+
+
+class PlainDoubleField(_PlainNumberField):
+    """Drop-in replacement for NoWheelDoubleSpinBox."""
+    pass
 
 
 class NoWheelViewBox(pg.ViewBox):

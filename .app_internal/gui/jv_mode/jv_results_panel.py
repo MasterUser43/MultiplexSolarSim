@@ -10,6 +10,7 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView,
+    QMessageBox,
 )
 
 from gui.custom_widgets import RichTextHeaderView
@@ -36,10 +37,14 @@ class JVResultsPanel(RawWidget):
 
     export_txt_requested = d_(Event(), writable=False)
     export_csv_requested = d_(Event(), writable=False)
+    delete_selected_requested = d_(Event(), writable=False)
+    clear_table_requested = d_(Event(), writable=False)
 
     _table = Typed(QTableWidget)
     _export_txt_btn = Typed(QPushButton)
     _export_csv_btn = Typed(QPushButton)
+    _delete_selected_btn = Typed(QPushButton)
+    _clear_table_btn = Typed(QPushButton)
     _shadow = Typed(object)
     _role_colored_items = List()  # [(QTableWidgetItem, role), ...] for theme refresh
 
@@ -62,6 +67,15 @@ class JVResultsPanel(RawWidget):
         title_lbl.setObjectName("PanelTitle")
         header_row.addWidget(title_lbl)
         header_row.addStretch(1)
+
+        self._delete_selected_btn = QPushButton("Delete Selected")
+        self._delete_selected_btn.clicked.connect(self._on_delete_selected_clicked)
+        self._delete_selected_btn.setEnabled(False)
+        header_row.addWidget(self._delete_selected_btn)
+
+        self._clear_table_btn = QPushButton("Clear Table")
+        self._clear_table_btn.clicked.connect(self._on_clear_table_clicked)
+        header_row.addWidget(self._clear_table_btn)
 
         export_lbl = QLabel("MANUAL EXPORT:")
         export_lbl.setObjectName("DimLabel")
@@ -103,6 +117,9 @@ class JVResultsPanel(RawWidget):
         self._table.setAlternatingRowColors(True)
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+
+        self._table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self._table.itemSelectionChanged.connect(self._on_selection_changed)
         self._table.verticalHeader().setVisible(False)
         self._table.verticalHeader().setDefaultSectionSize(24)
         self._table.horizontalHeader().setStretchLastSection(True)
@@ -121,13 +138,55 @@ class JVResultsPanel(RawWidget):
     def _on_export_csv_clicked(self):
         self.export_csv_requested = True
 
+    def _on_selection_changed(self):
+        self._delete_selected_btn.setEnabled(bool(self._table.selectedIndexes()))
+
+    def _on_delete_selected_clicked(self):
+        self.delete_selected_requested = True
+
+    def _on_clear_table_clicked(self):
+        row_count = self._table.rowCount()
+        if row_count == 0:
+            return
+        reply = QMessageBox.question(
+            self._table,
+            "Clear Table",
+            f"Clear all {row_count} row(s) from the results table?\n"
+            "This can't be undone (already-autosaved files on disk are not affected).",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            self.clear_table_requested = True
+
     # --- Public API for the controller ---
 
     def clear(self):
         self._table.setRowCount(0)
         self._role_colored_items = []
+        self._delete_selected_btn.setEnabled(False)
 
-    def add_result_row(self, pixel, area, metrics, status, loop_idx=None):
+    def get_selected_row_tokens(self):
+        """Row tokens for every currently selected row, for the controller 
+        to map back to its own records."""
+        rows = sorted({index.row() for index in self._table.selectedIndexes()})
+        tokens = []
+        for r in rows:
+            item = self._table.item(r, 0)
+            if item is not None:
+                tokens.append(item.data(Qt.UserRole))
+        return tokens
+
+    def remove_rows_by_tokens(self, tokens):
+        """Removes rows whose row_token is in tokens."""
+        token_set = set(tokens)
+        for r in range(self._table.rowCount() - 1, -1, -1):
+            item = self._table.item(r, 0)
+            if item is not None and item.data(Qt.UserRole) in token_set:
+                self._table.removeRow(r)
+        self._delete_selected_btn.setEnabled(False)
+
+    def add_result_row(self, pixel, area, metrics, status, loop_idx=None, row_token=None):
         r = self._table.rowCount()
         self._table.insertRow(r)
 
@@ -159,6 +218,9 @@ class JVResultsPanel(RawWidget):
         role_colored = list(self._role_colored_items)
         for col, value in enumerate(values):
             item = QTableWidgetItem(value)
+
+            if col == 0:
+                item.setData(Qt.UserRole, row_token)
 
             if col > 0:
                 item.setTextAlignment(Qt.AlignCenter)
