@@ -37,15 +37,10 @@ class PlotManager:
 
     def __init__(self, range_dialog_callback=None):
         self.plot = pg.PlotWidget(viewBox=NoWheelViewBox(range_dialog_callback))
-        self.plot.setBackground("#ffffff")
         self.plot.showGrid(x=True, y=True, alpha=0.22)
         self.plot.setLabel("bottom", "Voltage", units="V")
         self.plot.setLabel("left", "Current Density", units="mA/cm\u00b2")
         self.plot.setMinimumHeight(300)
-        self.plot.getAxis("bottom").setPen(pg.mkPen("#52606d"))
-        self.plot.getAxis("left").setPen(pg.mkPen("#52606d"))
-        self.plot.getAxis("bottom").setTextPen(pg.mkPen("#334e68"))
-        self.plot.getAxis("left").setTextPen(pg.mkPen("#334e68"))
 
         self.pixel_legend = None
         self.loop_legend = None

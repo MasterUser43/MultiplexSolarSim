@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QFileDialog
 
 from controllers.jv_worker import MeasurementWorker
 from core.sweep_state import SweepState
+from core.exporter import DEFAULT_SAMPLE_NAME
 from gui.formatting import format_metric
 
 _METRIC_KEYS = (
@@ -50,7 +51,7 @@ class JVController(QObject):
 
         self.results = []
         self.worker = None
-        self.state = SweepState()  # Atom mirror of the signals below, for Enaml views
+        self.state = SweepState()  # Atom mirror of the signals below, for GUI observers
 
         self.plot_panel.set_logger(self.log)
         self.config_panel.observe("run_requested", lambda change: self.run_measurement())
@@ -170,7 +171,7 @@ class JVController(QObject):
         curve_filename = None
 
         if self.config_panel.autosave_curves_enabled():
-            self.exporter.sample_name = self.get_sample_name() or "solar_iv_data"
+            self.exporter.sample_name = self.get_sample_name() or DEFAULT_SAMPLE_NAME
             try:
                 _curve_path, curve_filename = self.exporter.save_curve_now(record)
                 saved_curve = True
@@ -178,7 +179,7 @@ class JVController(QObject):
                 self.log(f"ERROR: could not auto-save curve for pixel {record['pixel']}: {e}")
 
         if self.config_panel.autosave_table_enabled():
-            self.exporter.sample_name = self.get_sample_name() or "solar_iv_data"
+            self.exporter.sample_name = self.get_sample_name() or DEFAULT_SAMPLE_NAME
             try:
                 self.exporter.save_table_row_now(record, curve_filename)
                 saved_table = True
@@ -308,7 +309,7 @@ class JVController(QObject):
             panel.set_path_preview("Select at least one pixel to preview the save path.", is_warning=False)
             return
 
-        self.exporter.sample_name = panel.sample_name() or "solar_iv_data"
+        self.exporter.sample_name = panel.sample_name() or DEFAULT_SAMPLE_NAME
 
         if table_on and curves_on:
             path = self.exporter.preview_txt_path(pixel)
@@ -330,7 +331,7 @@ class JVController(QObject):
                 self.log("WARNING: No results to save")
             return
 
-        self.exporter.sample_name = self.get_sample_name() or "solar_iv_data"
+        self.exporter.sample_name = self.get_sample_name() or DEFAULT_SAMPLE_NAME
 
         if not auto:
             chosen_dir = QFileDialog.getExistingDirectory(
@@ -347,7 +348,7 @@ class JVController(QObject):
         try:
             import pyqtgraph.exporters
 
-            self.exporter.sample_name = self.get_sample_name() or "solar_iv_data"
+            self.exporter.sample_name = self.get_sample_name() or DEFAULT_SAMPLE_NAME
             folder = os.path.abspath(self.exporter.output_dir)
             timestamp = time.strftime("%H%M%S")
             basename = self.exporter._basename()
@@ -374,7 +375,7 @@ class JVController(QObject):
         try:
             import csv
 
-            self.exporter.sample_name = self.get_sample_name() or "solar_iv_data"
+            self.exporter.sample_name = self.get_sample_name() or DEFAULT_SAMPLE_NAME
             folder = os.path.abspath(self.exporter.output_dir)
             timestamp = time.strftime("%H%M%S")
             basename = self.exporter._basename()

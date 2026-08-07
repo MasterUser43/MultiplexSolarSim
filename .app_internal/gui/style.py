@@ -293,13 +293,13 @@ def _build_theme(c):
     }}
     QLabel#MetricLabel {{
         color: {c['accent']};
-        font-size: 16px;
+        font-size: 20px;
         font-weight: bold;
         letter-spacing: 1px;
     }}
     QLabel#MetricValue {{
         color: {c['text_main']};
-        font-size: 30px;
+        font-size: 26px;
         font-weight: 800;
         letter-spacing: -0.5px;
     }}

@@ -19,6 +19,9 @@ import numpy as np
 RAW_CURVES_SUBDIR = "raw_curves"
 MANIFEST_FILENAME = "session_summary.csv"
 
+# Single source of truth for the "no name given" fallback.
+DEFAULT_SAMPLE_NAME = "solar_iv_data"
+
 _MANIFEST_HEADER = [
     "timestamp", "sample_name", "loop", "pixel", "area_cm2",
     "Voc_V", "Jsc_mA_cm2", "FF", "PCE_percent", "Vmpp_V", "Jmp_mA_cm2", "Pmax_mW_cm2",
@@ -41,10 +44,10 @@ class ResultsExporter:
                 allowed.append(ch)
             elif ch in (" ", ".", "/"):
                 allowed.append("_")
-        return "".join(allowed).strip("_") or "solar_iv_data"
+        return "".join(allowed).strip("_") or DEFAULT_SAMPLE_NAME
 
     def _basename(self):
-        basename = os.path.basename((self.sample_name or "").strip() or "solar_iv_data")
+        basename = os.path.basename((self.sample_name or "").strip() or DEFAULT_SAMPLE_NAME)
         root, ext = os.path.splitext(basename)
         if ext:
             basename = root

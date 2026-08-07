@@ -2,9 +2,7 @@
 JV "RESULTS" tab: the extracted-metrics table and its Export .TXT / Export
 .CSV buttons.
 """
-from atom.api import Bool, Event, List, Typed
-from enaml.core.declarative import d_
-from enaml.widgets.raw_widget import RawWidget
+from atom.api import Atom, Bool, Event, List, Typed
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
@@ -30,16 +28,17 @@ _HEADERS = [
 ]
 
 
-class JVResultsPanel(RawWidget):
+class JVResultsPanel(Atom):
     __slots__ = ('__weakref__',)
 
-    is_dark_mode = d_(Bool(False))
+    is_dark_mode = Bool(False)
 
-    export_txt_requested = d_(Event(), writable=False)
-    export_csv_requested = d_(Event(), writable=False)
-    delete_selected_requested = d_(Event(), writable=False)
-    clear_table_requested = d_(Event(), writable=False)
+    export_txt_requested = Event()
+    export_csv_requested = Event()
+    delete_selected_requested = Event()
+    clear_table_requested = Event()
 
+    _widget = Typed(QWidget)
     _table = Typed(QTableWidget)
     _export_txt_btn = Typed(QPushButton)
     _export_csv_btn = Typed(QPushButton)
@@ -48,10 +47,14 @@ class JVResultsPanel(RawWidget):
     _shadow = Typed(object)
     _role_colored_items = List()  # [(QTableWidgetItem, role), ...] for theme refresh
 
+    def get_widget(self):
+        return self._widget
+
     def create_widget(self, parent):
         container = QWidget(parent)
         layout = QVBoxLayout(container)
         layout.addWidget(self._build_results_panel())
+        self._widget = container
         return container
 
     def _build_results_panel(self):

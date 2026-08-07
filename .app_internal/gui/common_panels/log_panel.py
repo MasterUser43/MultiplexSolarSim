@@ -10,9 +10,7 @@ severity, which doesn't have a declarative-markup equivalent in Enaml.
 import os
 import time
 
-from atom.api import Bool, Str, Typed, Value
-from enaml.core.declarative import d_
-from enaml.widgets.raw_widget import RawWidget
+from atom.api import Atom, Bool, Str, Typed, Value
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QTextCursor, QTextCharFormat, QTextFormat
 from PySide6.QtWidgets import (
@@ -29,15 +27,19 @@ from gui.style import get_theme_colors
 _LOG_ROLE_PROPERTY = QTextFormat.UserProperty + 1
 
 
-class LogPanel(RawWidget):
+class LogPanel(Atom):
     __slots__ = ('__weakref__',)
 
-    output_dir = d_(Str())
-    is_dark_mode = d_(Bool(False))
+    output_dir = Str()
+    is_dark_mode = Bool(False)
 
+    _widget = Typed(QWidget)
     _log = Typed(QTextEdit)
     _output_dir_field = Typed(QLineEdit)
     _shadow = Value()  # QGraphicsDropShadowEffect, from make_panel_shadow()
+
+    def get_widget(self):
+        return self._widget
 
     def create_widget(self, parent):
         container = QWidget(parent)
@@ -86,6 +88,7 @@ class LogPanel(RawWidget):
 
         self._shadow = make_panel_shadow(card, self.is_dark_mode)
 
+        self._widget = container
         return container
 
     # --- Public API  ---

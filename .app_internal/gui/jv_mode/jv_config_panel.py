@@ -4,9 +4,7 @@ dataset card on the right. Owns and validates its own inputs.
 """
 import functools
 
-from atom.api import Bool, Event, List, Typed, Value
-from enaml.core.declarative import d_
-from enaml.widgets.raw_widget import RawWidget
+from atom.api import Atom, Bool, Event, List, Typed, Value
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel,
@@ -29,17 +27,19 @@ _TRACE_W, _TRACE_H = 35, 2
 _PAD_W, _PAD_H = 10, 6
 
 
-class JVConfigPanel(RawWidget):
+class JVConfigPanel(Atom):
     __slots__ = ('__weakref__',)
 
-    is_dark_mode = d_(Bool(False))
+    is_dark_mode = Bool(False)
 
-    run_requested = d_(Event(), writable=False)
-    layout_changed = d_(Event(), writable=False)
-    browse_requested = d_(Event(), writable=False)
-    name_changed = d_(Event(), writable=False)
-    autosave_table_toggled = d_(Event(), writable=False)
-    autosave_curves_toggled = d_(Event(), writable=False)
+    run_requested = Event()
+    layout_changed = Event()
+    browse_requested = Event()
+    name_changed = Event()
+    autosave_table_toggled = Event()
+    autosave_curves_toggled = Event()
+
+    _widget = Typed(QWidget)
 
     # Sweep-parameter inputs
     _v0 = Typed(PlainDoubleField)
@@ -82,6 +82,9 @@ class JVConfigPanel(RawWidget):
     _autosave_curves_checkbox = Typed(QCheckBox)
     _path_preview = Typed(QLabel)
 
+    def get_widget(self):
+        return self._widget
+
     def create_widget(self, parent):
         container = QWidget(parent)
 
@@ -99,6 +102,7 @@ class JVConfigPanel(RawWidget):
         layout.addWidget(self._sweep_panel, 1)
         layout.addWidget(self._build_pixel_panel(), 2)
 
+        self._widget = container
         return container
 
     # --- Sweep panel ---

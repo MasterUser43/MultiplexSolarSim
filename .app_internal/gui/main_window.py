@@ -4,9 +4,7 @@ controllers to process respective button presses.
 """
 import os
 
-import enaml
 import pyqtgraph as pg
-from enaml.qt.qt_application import QtApplication
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QProgressBar, QScrollArea
@@ -22,9 +20,7 @@ from gui.custom_widgets import SafeTabBar, SizeAwareTabWidget
 from gui.style import get_theme, get_theme_colors
 from gui.effects import make_panel_shadow, update_shadow_color, animate_tab_switch
 
-with enaml.imports():
-    from gui.common_panels.header_panel import HeaderPanel
-
+from gui.common_panels.header_panel import HeaderPanel
 from gui.common_panels.log_panel import LogPanel
 
 from gui.jv_mode.jv_config_panel import JVConfigPanel
@@ -37,20 +33,9 @@ RESULTS_TAB_INDEX = 2
 LOGS_TAB_INDEX = 3
 
 
-def _activate(declarative_obj):
-    """parent=None -> initialize() -> activate_proxy(), then return the
-    real Qt widget for Qt-level embedding. See module docstring."""
-    declarative_obj.initialize()
-    declarative_obj.activate_proxy()
-    return declarative_obj.proxy.widget
-
-
 class MainWindow(QWidget):
     def __init__(self, mock=False):
         super().__init__()
-
-        if QtApplication.instance() is None:
-            QtApplication()
 
         self.is_dark_mode = False
         self._shadow_widgets = []
@@ -69,8 +54,6 @@ class MainWindow(QWidget):
         self._build_ui()
         self._wire_controllers()
 
-        QTimer.singleShot(50, lambda: self.header_panel.post_activate_setup())
-
     def apply_style(self):
         self.setFont(QFont("Segoe UI", 10))
         self.setStyleSheet(get_theme(self.is_dark_mode))
@@ -85,7 +68,7 @@ class MainWindow(QWidget):
         self.header_panel = HeaderPanel(is_dark_mode=self.is_dark_mode)
         self._register_theme_aware(self.header_panel)
         self.header_panel.observe("theme_toggled", self._on_theme_toggled)
-        main.addWidget(_activate(self.header_panel))
+        main.addWidget(self.header_panel.create_widget(self))
 
         self.tabs = SizeAwareTabWidget()
         self.tabs.setTabBar(SafeTabBar(self.tabs))
@@ -103,23 +86,23 @@ class MainWindow(QWidget):
         # TAB 1: CONFIG
         self.jv_config_panel = JVConfigPanel(is_dark_mode=self.is_dark_mode)
         self._register_theme_aware(self.jv_config_panel)
-        self.tabs.addTab(_activate(self.jv_config_panel), "1. CONFIG")
+        self.tabs.addTab(self.jv_config_panel.create_widget(self.tabs), "1. CONFIG")
         self.jv_config_panel.observe("layout_changed", self._on_config_layout_changed)
 
         # TAB 2: SWEEP
         self.jv_plot_panel = JVPlotPanel(is_dark_mode=self.is_dark_mode)
         self._register_theme_aware(self.jv_plot_panel)
-        self.tabs.addTab(_activate(self.jv_plot_panel), "2. SWEEP")
+        self.tabs.addTab(self.jv_plot_panel.create_widget(self.tabs), "2. SWEEP")
 
         # TAB 3: RESULTS
         self.jv_results_panel = JVResultsPanel(is_dark_mode=self.is_dark_mode)
         self._register_theme_aware(self.jv_results_panel)
-        self.tabs.addTab(_activate(self.jv_results_panel), "3. RESULTS")
+        self.tabs.addTab(self.jv_results_panel.create_widget(self.tabs), "3. RESULTS")
 
         # TAB 4: LOGS
         self.log_panel = LogPanel(output_dir=self.output_dir, is_dark_mode=self.is_dark_mode)
         self._register_theme_aware(self.log_panel)
-        self.tabs.addTab(_activate(self.log_panel), "4. LOGS")
+        self.tabs.addTab(self.log_panel.create_widget(self.tabs), "4. LOGS")
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -223,7 +206,7 @@ class MainWindow(QWidget):
     def _on_config_layout_changed(self, change):
         # The pixel grid rebuilt itself after a debounce delay, so
         # re-measure the tab widget/scroll area.
-        self.jv_config_panel.proxy.widget.updateGeometry()
+        self.jv_config_panel.get_widget().updateGeometry()
         self.tabs.updateGeometry()
         self.scroll.updateGeometry()
 

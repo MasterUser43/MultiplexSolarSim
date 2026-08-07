@@ -3,9 +3,7 @@ JV "SWEEP" tab: the live IV curve plot plus the live-metrics HUD sitting
 beside it. Owns a PlotManager instance. Exposes plain setter methods for
 the controller to push live data in as the sweep runs.
 """
-from atom.api import Bool, Callable, Event, List, Typed
-from enaml.core.declarative import d_
-from enaml.widgets.raw_widget import RawWidget
+from atom.api import Atom, Bool, Callable, Event, List, Typed
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton
@@ -15,14 +13,15 @@ from gui.effects import make_panel_shadow, update_shadow_color
 from gui.style import get_theme_colors
 
 
-class JVPlotPanel(RawWidget):
+class JVPlotPanel(Atom):
     __slots__ = ('__weakref__',)
 
-    is_dark_mode = d_(Bool(False))
+    is_dark_mode = Bool(False)
 
-    abort_requested = d_(Event(), writable=False)
-    export_png_requested = d_(Event(), writable=False)
+    abort_requested = Event()
+    export_png_requested = Event()
 
+    _widget = Typed(QWidget)
     plot_manager = Typed(PlotManager)
     _hud_active_pixel = Typed(QLabel)
     _hud_voc = Typed(QLabel)
@@ -33,12 +32,16 @@ class JVPlotPanel(RawWidget):
     _shadow_widgets = List()
     _log = Callable(lambda message: None)  # replaced via set_logger()
 
+    def get_widget(self):
+        return self._widget
+
     def create_widget(self, parent):
         container = QWidget(parent)
         layout = QHBoxLayout(container)
         layout.setSpacing(15)
         layout.addWidget(self._build_plot_panel(), 3)
         layout.addWidget(self._build_live_hud(), 1)
+        self._widget = container
         return container
 
     def _build_plot_panel(self):
